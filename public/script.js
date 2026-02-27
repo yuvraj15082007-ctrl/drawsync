@@ -8,6 +8,8 @@ canvas.height = window.innerHeight;
 let drawing = false;
 let color = "black";
 let brushSize = 3;
+let lastX = 0;
+let lastY = 0;
 
 ctx.lineCap = "round";
 ctx.lineJoin = "round";
@@ -33,68 +35,86 @@ function drawBackgroundMessage() {
 
 drawBackgroundMessage();
 
-function startPosition(x, y) {
+function startDrawing(x, y) {
     drawing = true;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
+    lastX = x;
+    lastY = y;
 }
 
-function endPosition() {
+function stopDrawing() {
     drawing = false;
 }
 
-function draw(x, y) {
+function drawLine(x, y, emit = true) {
     if (!drawing) return;
 
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
     ctx.lineTo(x, y);
     ctx.strokeStyle = color;
     ctx.lineWidth = brushSize;
     ctx.stroke();
+    ctx.closePath();
 
-    socket.emit("draw", { x, y, color, brushSize });
+    if (emit) {
+        socket.emit("draw", {
+            x,
+            y,
+            lastX,
+            lastY,
+            color,
+            brushSize
+        });
+    }
+
+    lastX = x;
+    lastY = y;
 }
 
-// 🖱 Mouse Events (PC)
+// 🖱 PC Events
 canvas.addEventListener("mousedown", (e) => {
-    startPosition(e.clientX, e.clientY);
+    startDrawing(e.clientX, e.clientY);
 });
 
-canvas.addEventListener("mouseup", endPosition);
+canvas.addEventListener("mouseup", stopDrawing);
 
 canvas.addEventListener("mousemove", (e) => {
-    draw(e.clientX, e.clientY);
+    drawLine(e.clientX, e.clientY);
 });
 
-// 📱 Touch Events (Mobile)
+// 📱 Mobile Events
 canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
     const touch = e.touches[0];
-    startPosition(touch.clientX, touch.clientY);
+    startDrawing(touch.clientX, touch.clientY);
 });
 
-canvas.addEventListener("touchend", endPosition);
+canvas.addEventListener("touchend", stopDrawing);
 
 canvas.addEventListener("touchmove", (e) => {
     e.preventDefault();
     const touch = e.touches[0];
-    draw(touch.clientX, touch.clientY);
+    drawLine(touch.clientX, touch.clientY);
 });
 
-// Receive drawing
+// 👥 Receive Drawing
 socket.on("draw", (data) => {
+    ctx.beginPath();
+    ctx.moveTo(data.lastX, data.lastY);
+    ctx.lineTo(data.x, data.y);
     ctx.strokeStyle = data.color;
     ctx.lineWidth = data.brushSize;
-    ctx.lineTo(data.x, data.y);
     ctx.stroke();
+    ctx.closePath();
 });
 
-// Color picker
+// 🎨 Color Picker
 document.getElementById("colorPicker")
     .addEventListener("input", (e) => {
         color = e.target.value;
     });
 
-// Clear
+// 🧹 Clear
 function clearBoard() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawBackgroundMessage();
