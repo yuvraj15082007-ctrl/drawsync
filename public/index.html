@@ -5,27 +5,31 @@
     <title>DrawSync</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
 <div class="toolbar">
+
     <input type="color" id="colorPicker" value="#000000">
     <input type="range" id="brushSize" min="1" max="30" value="3">
+
     <button onclick="setBrush()">Brush</button>
     <button onclick="setEraser()">Eraser</button>
     <button onclick="clearBoard()">Clear</button>
     <button onclick="createRoom()">Create Room</button>
-<button onclick="joinRoom()">Join Room</button>
-
-<div id="roomInfo"></div>
-<div id="notifications"></div>
+    <button onclick="joinRoom()">Join Room</button>
 
     <span id="zoomLevel">100%</span>
 
     <div id="onlineBox">
-        <span id="userCount" onclick="toggleUsers()">Online: 1</span>
+        <span id="userCount" onclick="toggleUsers()">Online: 0</span>
         <div id="userList" class="hidden"></div>
     </div>
+
 </div>
+
+<div id="roomInfo"></div>
+<div id="notifications"></div>
 
 <canvas id="canvas"></canvas>
 

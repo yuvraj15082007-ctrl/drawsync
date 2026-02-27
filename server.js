@@ -8,85 +8,58 @@ const io = new Server(server);
 
 app.use(express.static("public"));
 
-let rooms = {
-    public: {
-        users: {},
-        strokes: []
-    }
+let rooms = {};
+
+// Default public room
+rooms["public"] = {
+    users: {},
+    strokes: []
 };
 
-function generateRoomPin() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-io.on("connection", socket => {
-    socket.join("public");
-rooms.public.users[socket.id] = "Guest";
-
-io.to("public").emit("userList",
-    Object.values(rooms.public.users));
-
-    socket.on("createRoom", name => {
-        const pin = generateRoomPin();
-
-        rooms[pin] = {
-            users: {},
-            strokes: []
-        };
-
-        socket.join(pin);
-        rooms[pin].users[socket.id] = name;
-
-        socket.emit("roomCreated", pin);
-        io.to(pin).emit("notification", name + " created the room");
-        io.to(pin).emit("userList", Object.values(rooms[pin].users));
-    });
+io.on("connection", (socket) => {
 
     socket.on("joinRoom", ({ pin, name }) => {
 
         if (!rooms[pin]) {
-            socket.emit("roomError", "Room not found");
-            return;
+            rooms[pin] = {
+                users: {},
+                strokes: []
+            };
         }
 
         socket.join(pin);
+        socket.room = pin;
+
         rooms[pin].users[socket.id] = name;
 
         socket.emit("loadStrokes", rooms[pin].strokes);
 
-        io.to(pin).emit("notification", name + " joined the room");
+        io.to(pin).emit("notification", `${name} joined`);
         io.to(pin).emit("userList", Object.values(rooms[pin].users));
     });
 
-    socket.on("draw", ({ pin, stroke }) => {
+    socket.on("draw", (data) => {
+        const { pin, stroke } = data;
         if (!rooms[pin]) return;
 
         rooms[pin].strokes.push(stroke);
         socket.to(pin).emit("draw", stroke);
     });
 
-    socket.on("clear", pin => {
+    socket.on("clearBoard", (pin) => {
         if (!rooms[pin]) return;
-
         rooms[pin].strokes = [];
-        io.to(pin).emit("clear");
+        io.to(pin).emit("clearBoard");
     });
 
     socket.on("disconnect", () => {
-        for (let pin in rooms) {
-            if (rooms[pin].users[socket.id]) {
-                const name = rooms[pin].users[socket.id];
-                delete rooms[pin].users[socket.id];
-
-                io.to(pin).emit("notification", name + " left the room");
-                io.to(pin).emit("userList", Object.values(rooms[pin].users));
-            }
+        const room = socket.room;
+        if (room && rooms[room]) {
+            delete rooms[room].users[socket.id];
+            io.to(room).emit("userList", Object.values(rooms[room].users));
         }
     });
-
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => {
-    console.log("Server running on port " + PORT);
-});
+server.listen(PORT, () => console.log("Server running on port", PORT));
