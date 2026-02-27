@@ -3,12 +3,17 @@
 <head>
     <meta name="google-site-verification" content="MCfB8pb0eiofs4Ik2zTMLykS45k2bl_1edX7p9qDikQ" />
     <title>DrawSync</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.html">
 </head>
 
 <body>
 
-<div class="toolbar">
+<div id="toolbarToggle" onclick="toggleToolbar()">☰</div>
+
+<div class="toolbar hiddenToolbar">
+
+    <h3>DrawSync</h3>
 
     <input type="color" id="colorPicker" value="#000000">
     <input type="range" id="brushSize" min="1" max="30" value="3">
@@ -16,20 +21,26 @@
     <button onclick="setBrush()">Brush</button>
     <button onclick="setEraser()">Eraser</button>
     <button onclick="clearBoard()">Clear</button>
-    <button onclick="createRoom()">Create Room</button>
-    <button onclick="joinRoom()">Join Room</button>
 
-    <span id="zoomLevel">100%</span>
+    <hr>
+
+    <button id="createBtn" onclick="createRoom()">Create Room</button>
+    <button id="joinBtn" onclick="joinRoom()">Join Room</button>
+    <button id="quitBtn" onclick="quitRoom()" style="display:none;">Quit Room</button>
+
+    <hr>
+
+    <div id="roomInfo">Room: public</div>
+    <div id="zoomLevel">100%</div>
 
     <div id="onlineBox">
-        <span id="userCount" onclick="toggleUsers()">Online: 0</span>
+        <div id="userCount" onclick="toggleUsers()">Online: 0</div>
         <div id="userList" class="hidden"></div>
     </div>
 
-</div>
+    <div id="notifications"></div>
 
-<div id="roomInfo"></div>
-<div id="notifications"></div>
+</div>
 
 <canvas id="canvas"></canvas>
 

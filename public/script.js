@@ -10,9 +10,7 @@ let originX = 0;
 let originY = 0;
 
 let drawing = false;
-let isPanning = false;
-
-let color = "black";
+let color = "#000000";
 let brushSize = 3;
 let currentRoom = "public";
 
@@ -21,29 +19,20 @@ if (!userName) userName = "Guest";
 
 socket.emit("joinRoom", { pin: "public", name: userName });
 
-// ================= COLOR + BRUSH SIZE =================
+function resetView() {
+    scale = 1;
+    originX = 0;
+    originY = 0;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    document.getElementById("zoomLevel").innerText = "100%";
+}
 
-document.getElementById("colorPicker").addEventListener("input", (e) => {
-    color = e.target.value;
-});
-
-document.getElementById("brushSize").addEventListener("input", (e) => {
-    brushSize = e.target.value;
-});
-
-// ================= PREVENT MOBILE REFRESH =================
-
-canvas.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
-canvas.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
-canvas.addEventListener("touchend", e => e.preventDefault(), { passive: false });
-
-// ================= DRAW FUNCTION =================
+/* ========= DRAW ========= */
 
 function drawLine(x0, y0, x1, y1, color, size) {
     ctx.strokeStyle = color;
     ctx.lineWidth = size;
     ctx.lineCap = "round";
-
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     ctx.lineTo(x1, y1);
@@ -52,8 +41,6 @@ function drawLine(x0, y0, x1, y1, color, size) {
 
 let lastX = 0;
 let lastY = 0;
-
-// ================= MOUSE DRAW =================
 
 canvas.addEventListener("mousedown", (e) => {
     drawing = true;
@@ -80,32 +67,22 @@ canvas.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("mouseup", () => drawing = false);
 
-// ================= TOUCH DRAW + ZOOM + PAN =================
-
-let startDistance = 0;
+/* ========= TOUCH SUPPORT ========= */
 
 canvas.addEventListener("touchstart", (e) => {
-
+    e.preventDefault();
     if (e.touches.length === 1) {
         drawing = true;
         const rect = canvas.getBoundingClientRect();
         lastX = (e.touches[0].clientX - rect.left - originX) / scale;
         lastY = (e.touches[0].clientY - rect.top - originY) / scale;
     }
-
-    if (e.touches.length === 2) {
-        drawing = false;
-        let dx = e.touches[0].clientX - e.touches[1].clientX;
-        let dy = e.touches[0].clientY - e.touches[1].clientY;
-        startDistance = Math.sqrt(dx * dx + dy * dy);
-    }
-});
+}, { passive: false });
 
 canvas.addEventListener("touchmove", (e) => {
-
+    e.preventDefault();
     const rect = canvas.getBoundingClientRect();
 
-    // Draw
     if (e.touches.length === 1 && drawing) {
         let x = (e.touches[0].clientX - rect.left - originX) / scale;
         let y = (e.touches[0].clientY - rect.top - originY) / scale;
@@ -121,66 +98,14 @@ canvas.addEventListener("touchmove", (e) => {
         lastY = y;
     }
 
-    // Pinch Zoom
-    if (e.touches.length === 2) {
+}, { passive: false });
 
-        let dx = e.touches[0].clientX - e.touches[1].clientX;
-        let dy = e.touches[0].clientY - e.touches[1].clientY;
-        let distance = Math.sqrt(dx * dx + dy * dy);
+canvas.addEventListener("touchend", () => drawing = false);
 
-        let zoomFactor = distance / startDistance;
-        scale *= zoomFactor;
+/* ========= UI ========= */
 
-        if (scale < 0.5) scale = 0.5;
-        if (scale > 3) scale = 3;
-
-        ctx.setTransform(scale, 0, 0, scale, originX, originY);
-
-        document.getElementById("zoomLevel").innerText =
-            Math.round(scale * 100) + "%";
-
-        startDistance = distance;
-    }
-});
-
-canvas.addEventListener("touchend", () => {
-    drawing = false;
-});
-
-// ================= SOCKET EVENTS =================
-
-socket.on("draw", (stroke) => {
-    drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
-});
-
-socket.on("loadStrokes", (strokes) => {
-    strokes.forEach(s =>
-        drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size)
-    );
-});
-
-socket.on("clearBoard", () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-});
-
-socket.on("userList", (users) => {
-    document.getElementById("userCount").innerText =
-        "Online: " + users.length;
-
-    const list = document.getElementById("userList");
-    list.innerHTML = users.map(u => `<div>${u}</div>`).join("");
-});
-
-socket.on("notification", (msg) => {
-    const box = document.getElementById("notifications");
-    box.innerText = msg;
-    setTimeout(() => box.innerText = "", 3000);
-});
-
-// ================= UI FUNCTIONS =================
-
-function clearBoard() {
-    socket.emit("clearBoard", currentRoom);
+function toggleToolbar() {
+    document.querySelector(".toolbar").classList.toggle("hiddenToolbar");
 }
 
 function createRoom() {
@@ -188,8 +113,11 @@ function createRoom() {
     if (!pin) return;
 
     currentRoom = pin;
+    resetView();
     socket.emit("joinRoom", { pin, name: userName });
+
     document.getElementById("roomInfo").innerText = "Room: " + pin;
+    toggleRoomButtons(true);
 }
 
 function joinRoom() {
@@ -197,12 +125,30 @@ function joinRoom() {
     if (!pin) return;
 
     currentRoom = pin;
+    resetView();
     socket.emit("joinRoom", { pin, name: userName });
+
     document.getElementById("roomInfo").innerText = "Room: " + pin;
+    toggleRoomButtons(true);
 }
 
-function toggleUsers() {
-    document.getElementById("userList").classList.toggle("hidden");
+function quitRoom() {
+    currentRoom = "public";
+    resetView();
+    socket.emit("joinRoom", { pin: "public", name: userName });
+
+    document.getElementById("roomInfo").innerText = "Room: public";
+    toggleRoomButtons(false);
+}
+
+function toggleRoomButtons(inRoom) {
+    document.getElementById("createBtn").style.display = inRoom ? "none" : "block";
+    document.getElementById("joinBtn").style.display = inRoom ? "none" : "block";
+    document.getElementById("quitBtn").style.display = inRoom ? "block" : "none";
+}
+
+function clearBoard() {
+    socket.emit("clearBoard", currentRoom);
 }
 
 function setBrush() {
@@ -210,5 +156,34 @@ function setBrush() {
 }
 
 function setEraser() {
-    color = "white";
+    color = "#ffffff";
 }
+
+function toggleUsers() {
+    document.getElementById("userList").classList.toggle("hidden");
+}
+
+/* ========= SOCKET ========= */
+
+socket.on("draw", (stroke) => {
+    drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
+});
+
+socket.on("loadStrokes", (strokes) => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    strokes.forEach(s =>
+        drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size)
+    );
+});
+
+socket.on("userList", (users) => {
+    document.getElementById("userCount").innerText = "Online: " + users.length;
+    document.getElementById("userList").innerHTML =
+        users.map(u => `<div>${u}</div>`).join("");
+});
+
+socket.on("notification", (msg) => {
+    const box = document.getElementById("notifications");
+    box.innerText = msg;
+    setTimeout(() => box.innerText = "", 3000);
+});
