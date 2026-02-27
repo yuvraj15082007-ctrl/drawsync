@@ -15,8 +15,11 @@ let isEraser = false;
 let scale = 1;
 let initialDistance = null;
 
+let strokes = [];
+
 ctx.lineCap = "round";
 ctx.lineJoin = "round";
+
 
 // 🎨 Background
 function drawBackgroundMessage() {
@@ -37,16 +40,32 @@ function drawBackgroundMessage() {
     ctx.restore();
 }
 
-drawBackgroundMessage();
 
-// 🔄 Apply Zoom
-function applyZoom() {
+// 🔄 Redraw Everything (IMPORTANT)
+function redrawCanvas() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
+
+    drawBackgroundMessage();
+
+    strokes.forEach(stroke => {
+        ctx.beginPath();
+        ctx.moveTo(stroke.lastX, stroke.lastY);
+        ctx.lineTo(stroke.x, stroke.y);
+        ctx.strokeStyle = stroke.isEraser ? "white" : stroke.color;
+        ctx.lineWidth = stroke.brushSize;
+        ctx.stroke();
+        ctx.closePath();
+    });
+
     document.getElementById("zoomLevel").innerText =
         Math.round(scale * 100) + "%";
 }
 
-// ✏️ Drawing
+
+// ✏️ Get scaled coordinates
 function getMousePos(x, y) {
     const rect = canvas.getBoundingClientRect();
     return {
@@ -55,6 +74,8 @@ function getMousePos(x, y) {
     };
 }
 
+
+// ✏️ Drawing
 function startDrawing(x, y) {
     drawing = true;
     const pos = getMousePos(x, y);
@@ -79,12 +100,22 @@ function drawLine(x, y, emit = true) {
     ctx.stroke();
     ctx.closePath();
 
+    strokes.push({
+        lastX,
+        lastY,
+        x: pos.x,
+        y: pos.y,
+        color,
+        brushSize,
+        isEraser
+    });
+
     if (emit) {
         socket.emit("draw", {
-            x: pos.x,
-            y: pos.y,
             lastX,
             lastY,
+            x: pos.x,
+            y: pos.y,
             color,
             brushSize,
             isEraser
@@ -95,6 +126,7 @@ function drawLine(x, y, emit = true) {
     lastY = pos.y;
 }
 
+
 // 🖱 PC Events
 canvas.addEventListener("mousedown", e => {
     startDrawing(e.clientX, e.clientY);
@@ -103,6 +135,7 @@ canvas.addEventListener("mouseup", stopDrawing);
 canvas.addEventListener("mousemove", e => {
     drawLine(e.clientX, e.clientY);
 });
+
 
 // 📱 Touch Events
 canvas.addEventListener("touchstart", e => {
@@ -131,7 +164,7 @@ canvas.addEventListener("touchmove", e => {
             let zoomFactor = newDistance / initialDistance;
             scale *= zoomFactor;
             scale = Math.max(0.5, Math.min(scale, 3));
-            applyZoom();
+            redrawCanvas();
         }
 
         initialDistance = newDistance;
@@ -146,16 +179,13 @@ function getDistance(touches) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
+
 // 👥 Receive drawing
 socket.on("draw", data => {
-    ctx.beginPath();
-    ctx.moveTo(data.lastX, data.lastY);
-    ctx.lineTo(data.x, data.y);
-    ctx.strokeStyle = data.isEraser ? "white" : data.color;
-    ctx.lineWidth = data.brushSize;
-    ctx.stroke();
-    ctx.closePath();
+    strokes.push(data);
+    redrawCanvas();
 });
+
 
 // 👥 User counter
 socket.on("userCount", count => {
@@ -163,12 +193,14 @@ socket.on("userCount", count => {
         "Users: " + count;
 });
 
-// 🎨 Color
+
+// 🎨 Color Picker
 document.getElementById("colorPicker")
     .addEventListener("input", e => {
         color = e.target.value;
         isEraser = false;
     });
+
 
 // 🖌 Brush Size
 document.getElementById("brushSize")
@@ -176,28 +208,31 @@ document.getElementById("brushSize")
         brushSize = e.target.value;
     });
 
+
 // 🧽 Tools
 function setEraser() {
     isEraser = true;
 }
+
 function setBrush() {
     isEraser = false;
 }
 
+
 // 🧹 Clear
 function clearBoard() {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    strokes = [];
     scale = 1;
-    applyZoom();
-    drawBackgroundMessage();
+    redrawCanvas();
     socket.emit("clear");
 }
 
 socket.on("clear", () => {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    strokes = [];
     scale = 1;
-    applyZoom();
-    drawBackgroundMessage();
+    redrawCanvas();
 });
+
+
+// Initial draw
+redrawCanvas();
