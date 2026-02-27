@@ -178,13 +178,23 @@ socket.on("draw", data => {
 
 socket.on("userCount", count => {
     document.getElementById("userCount").innerText =
-        "Users: " + count;
+        "Online: " + count;
 });
 
 socket.on("userList", list => {
-    document.getElementById("userList").innerText =
-        "Online: " + list.join(", ");
+    const userListDiv = document.getElementById("userList");
+    userListDiv.innerHTML = "";
+
+    list.forEach(name => {
+        const div = document.createElement("div");
+        div.innerText = name;
+        userListDiv.appendChild(div);
+    });
 });
+function toggleUsers() {
+    const userList = document.getElementById("userList");
+    userList.classList.toggle("hidden");
+}
 
 
 // 🎨 Tools
