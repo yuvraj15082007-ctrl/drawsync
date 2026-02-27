@@ -3,7 +3,16 @@ body {
     overflow: hidden;
     font-family: Arial, sans-serif;
 }
+html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    touch-action: none; /* IMPORTANT */
+}
 
+canvas {
+    touch-action: none;
+}
 .toolbar {
     position: fixed;
     top: 10px;
