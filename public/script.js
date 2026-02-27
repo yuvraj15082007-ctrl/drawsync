@@ -18,18 +18,22 @@ let initialDistance = null;
 ctx.lineCap = "round";
 ctx.lineJoin = "round";
 
-// 🎨 Background
+// 🎨 Background Message
 function drawBackgroundMessage() {
     ctx.save();
     ctx.globalAlpha = 0.08;
     ctx.textAlign = "center";
     ctx.fillStyle = "black";
+
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate(-Math.PI / 8);
+
     ctx.font = "bold 60px Arial";
     ctx.fillText("This is for you Nancy 💖", 0, -40);
+
     ctx.font = "bold 40px Arial";
     ctx.fillText("From Yuvraj", 0, 40);
+
     ctx.restore();
 }
 
@@ -76,7 +80,7 @@ function drawLine(x, y, emit = true) {
     lastY = newY;
 }
 
-// 🖱 PC
+// 🖱 PC Events
 canvas.addEventListener("mousedown", e => {
     startDrawing(e.clientX, e.clientY);
 });
@@ -87,7 +91,7 @@ canvas.addEventListener("mousemove", e => {
     drawLine(e.clientX, e.clientY);
 });
 
-// 📱 Touch
+// 📱 Touch Events
 canvas.addEventListener("touchstart", e => {
     if (e.touches.length === 1) {
         const touch = e.touches[0];
@@ -114,6 +118,9 @@ canvas.addEventListener("touchmove", e => {
             scale *= newDistance / initialDistance;
             scale = Math.max(0.5, Math.min(scale, 3));
             canvas.style.transform = `scale(${scale})`;
+
+            document.getElementById("zoomLevel").innerText =
+                Math.round(scale * 100) + "%";
         }
 
         initialDistance = newDistance;
@@ -128,7 +135,7 @@ function getDistance(touches) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-// 👥 Receive
+// 👥 Receive Drawing
 socket.on("draw", data => {
     ctx.beginPath();
     ctx.moveTo(data.lastX, data.lastY);
@@ -139,14 +146,20 @@ socket.on("draw", data => {
     ctx.closePath();
 });
 
-// 🎨 Color
+// 👥 User Counter
+socket.on("userCount", count => {
+    document.getElementById("userCount").innerText =
+        "Users: " + count;
+});
+
+// 🎨 Color Picker
 document.getElementById("colorPicker")
     .addEventListener("input", e => {
         color = e.target.value;
         isEraser = false;
     });
 
-// 🖌 Brush size
+// 🖌 Brush Size Slider
 document.getElementById("brushSize")
     .addEventListener("input", e => {
         brushSize = e.target.value;

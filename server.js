@@ -5,8 +5,11 @@ const io = require("socket.io")(http);
 
 app.use(express.static("public"));
 
+let users = 0;
+
 io.on("connection", (socket) => {
-    console.log("User connected");
+    users++;
+    io.emit("userCount", users);
 
     socket.on("draw", (data) => {
         socket.broadcast.emit("draw", data);
@@ -17,7 +20,8 @@ io.on("connection", (socket) => {
     });
 
     socket.on("disconnect", () => {
-        console.log("User disconnected");
+        users--;
+        io.emit("userCount", users);
     });
 });
 
