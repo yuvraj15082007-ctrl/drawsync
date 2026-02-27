@@ -15,7 +15,6 @@ ctx.lineJoin = "round";
 // 🎨 Background Message
 function drawBackgroundMessage() {
     ctx.save();
-
     ctx.globalAlpha = 0.08;
     ctx.textAlign = "center";
     ctx.fillStyle = "black";
@@ -34,35 +33,54 @@ function drawBackgroundMessage() {
 
 drawBackgroundMessage();
 
-// 🎨 Drawing Logic
-canvas.addEventListener("mousedown", (e) => {
+function startPosition(x, y) {
     drawing = true;
     ctx.beginPath();
-    ctx.moveTo(e.clientX, e.clientY);
-});
+    ctx.moveTo(x, y);
+}
 
-canvas.addEventListener("mouseup", () => {
+function endPosition() {
     drawing = false;
-});
+}
 
-canvas.addEventListener("mousemove", draw);
-
-function draw(e) {
+function draw(x, y) {
     if (!drawing) return;
 
-    ctx.lineTo(e.clientX, e.clientY);
+    ctx.lineTo(x, y);
     ctx.strokeStyle = color;
     ctx.lineWidth = brushSize;
     ctx.stroke();
 
-    socket.emit("draw", {
-        x: e.clientX,
-        y: e.clientY,
-        color,
-        brushSize
-    });
+    socket.emit("draw", { x, y, color, brushSize });
 }
 
+// 🖱 Mouse Events (PC)
+canvas.addEventListener("mousedown", (e) => {
+    startPosition(e.clientX, e.clientY);
+});
+
+canvas.addEventListener("mouseup", endPosition);
+
+canvas.addEventListener("mousemove", (e) => {
+    draw(e.clientX, e.clientY);
+});
+
+// 📱 Touch Events (Mobile)
+canvas.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    startPosition(touch.clientX, touch.clientY);
+});
+
+canvas.addEventListener("touchend", endPosition);
+
+canvas.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    draw(touch.clientX, touch.clientY);
+});
+
+// Receive drawing
 socket.on("draw", (data) => {
     ctx.strokeStyle = data.color;
     ctx.lineWidth = data.brushSize;
@@ -70,13 +88,13 @@ socket.on("draw", (data) => {
     ctx.stroke();
 });
 
-// 🎨 Color Picker
+// Color picker
 document.getElementById("colorPicker")
     .addEventListener("input", (e) => {
         color = e.target.value;
     });
 
-// 🧹 Clear Board
+// Clear
 function clearBoard() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawBackgroundMessage();
