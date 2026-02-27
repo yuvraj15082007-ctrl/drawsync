@@ -29,7 +29,7 @@ function drawBackgroundMessage() {
     ctx.rotate(-Math.PI / 8);
 
     ctx.font = "bold 60px Arial";
-    ctx.fillText("This is for you Nancy 💖", 0, -40);
+    ctx.fillText("This is for someone", 0, -40);
 
     ctx.font = "bold 40px Arial";
     ctx.fillText("From someone", 0, 40);
