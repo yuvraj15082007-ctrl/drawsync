@@ -10,8 +10,10 @@ let color = "black";
 let brushSize = 3;
 let lastX = 0;
 let lastY = 0;
-let scale = 1;
 let isEraser = false;
+
+let scale = 1;
+let initialDistance = null;
 
 ctx.lineCap = "round";
 ctx.lineJoin = "round";
@@ -33,6 +35,7 @@ function drawBackgroundMessage() {
 
 drawBackgroundMessage();
 
+// ✏️ Drawing Logic
 function startDrawing(x, y) {
     drawing = true;
     lastX = x / scale;
@@ -74,33 +77,59 @@ function drawLine(x, y, emit = true) {
 }
 
 // 🖱 PC
-canvas.addEventListener("mousedown", (e) => {
+canvas.addEventListener("mousedown", e => {
     startDrawing(e.clientX, e.clientY);
 });
 
 canvas.addEventListener("mouseup", stopDrawing);
 
-canvas.addEventListener("mousemove", (e) => {
+canvas.addEventListener("mousemove", e => {
     drawLine(e.clientX, e.clientY);
 });
 
-// 📱 Mobile
-canvas.addEventListener("touchstart", (e) => {
+// 📱 Touch
+canvas.addEventListener("touchstart", e => {
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        startDrawing(touch.clientX, touch.clientY);
+    }
+
+    if (e.touches.length === 2) {
+        initialDistance = getDistance(e.touches);
+    }
+});
+
+canvas.addEventListener("touchmove", e => {
     e.preventDefault();
-    const touch = e.touches[0];
-    startDrawing(touch.clientX, touch.clientY);
+
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        drawLine(touch.clientX, touch.clientY);
+    }
+
+    if (e.touches.length === 2) {
+        const newDistance = getDistance(e.touches);
+
+        if (initialDistance) {
+            scale *= newDistance / initialDistance;
+            scale = Math.max(0.5, Math.min(scale, 3));
+            canvas.style.transform = `scale(${scale})`;
+        }
+
+        initialDistance = newDistance;
+    }
 });
 
 canvas.addEventListener("touchend", stopDrawing);
 
-canvas.addEventListener("touchmove", (e) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    drawLine(touch.clientX, touch.clientY);
-});
+function getDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
 
 // 👥 Receive
-socket.on("draw", (data) => {
+socket.on("draw", data => {
     ctx.beginPath();
     ctx.moveTo(data.lastX, data.lastY);
     ctx.lineTo(data.x, data.y);
@@ -112,30 +141,24 @@ socket.on("draw", (data) => {
 
 // 🎨 Color
 document.getElementById("colorPicker")
-    .addEventListener("input", (e) => {
+    .addEventListener("input", e => {
         color = e.target.value;
         isEraser = false;
     });
 
-// 🧽 Eraser
+// 🖌 Brush size
+document.getElementById("brushSize")
+    .addEventListener("input", e => {
+        brushSize = e.target.value;
+    });
+
+// 🧽 Tools
 function setEraser() {
     isEraser = true;
 }
 
 function setBrush() {
     isEraser = false;
-}
-
-// 🔍 Zoom
-function zoomIn() {
-    scale += 0.1;
-    canvas.style.transform = `scale(${scale})`;
-}
-
-function zoomOut() {
-    scale -= 0.1;
-    if (scale < 0.5) scale = 0.5;
-    canvas.style.transform = `scale(${scale})`;
 }
 
 // 🧹 Clear
