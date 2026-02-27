@@ -8,13 +8,23 @@ const io = new Server(server);
 
 app.use(express.static("public"));
 
-let rooms = {};
+let rooms = {
+    public: {
+        users: {},
+        strokes: []
+    }
+};
 
 function generateRoomPin() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 io.on("connection", socket => {
+    socket.join("public");
+rooms.public.users[socket.id] = "Guest";
+
+io.to("public").emit("userList",
+    Object.values(rooms.public.users));
 
     socket.on("createRoom", name => {
         const pin = generateRoomPin();

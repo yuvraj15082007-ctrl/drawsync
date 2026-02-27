@@ -5,6 +5,7 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+let currentRoom = "public";
 let strokes = [];
 let currentRoom = null;
 
@@ -30,6 +31,7 @@ ctx.lineJoin = "round";
 // 👤 Ask Name
 let userName = prompt("Enter your name:");
 if (!userName) userName = "Guest";
+socket.emit("joinRoom", { pin: "public", name: userName });
 
 
 // ============================
@@ -97,13 +99,6 @@ function getPos(x, y) {
     };
 }
 
-function startDrawing(x, y) {
-    if (!currentRoom) return alert("Join or create a room first!");
-    drawing = true;
-    const pos = getPos(x, y);
-    lastX = pos.x;
-    lastY = pos.y;
-}
 
 function stopDrawing() {
     drawing = false;
