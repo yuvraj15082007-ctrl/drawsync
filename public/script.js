@@ -18,7 +18,7 @@ let initialDistance = null;
 ctx.lineCap = "round";
 ctx.lineJoin = "round";
 
-// 🎨 Background Message
+// 🎨 Background
 function drawBackgroundMessage() {
     ctx.save();
     ctx.globalAlpha = 0.08;
@@ -29,21 +29,37 @@ function drawBackgroundMessage() {
     ctx.rotate(-Math.PI / 8);
 
     ctx.font = "bold 60px Arial";
-    ctx.fillText("This is for you Nancy 💖", 0, -40);
+    ctx.fillText("This is for you Someone 💖", 0, -40);
 
     ctx.font = "bold 40px Arial";
-    ctx.fillText("From Yuvraj", 0, 40);
+    ctx.fillText("From Someone", 0, 40);
 
     ctx.restore();
 }
 
 drawBackgroundMessage();
 
-// ✏️ Drawing Logic
+// 🔄 Apply Zoom
+function applyZoom() {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    document.getElementById("zoomLevel").innerText =
+        Math.round(scale * 100) + "%";
+}
+
+// ✏️ Drawing
+function getMousePos(x, y) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (x - rect.left) / scale,
+        y: (y - rect.top) / scale
+    };
+}
+
 function startDrawing(x, y) {
     drawing = true;
-    lastX = x / scale;
-    lastY = y / scale;
+    const pos = getMousePos(x, y);
+    lastX = pos.x;
+    lastY = pos.y;
 }
 
 function stopDrawing() {
@@ -53,12 +69,11 @@ function stopDrawing() {
 function drawLine(x, y, emit = true) {
     if (!drawing) return;
 
-    const newX = x / scale;
-    const newY = y / scale;
+    const pos = getMousePos(x, y);
 
     ctx.beginPath();
     ctx.moveTo(lastX, lastY);
-    ctx.lineTo(newX, newY);
+    ctx.lineTo(pos.x, pos.y);
     ctx.strokeStyle = isEraser ? "white" : color;
     ctx.lineWidth = brushSize;
     ctx.stroke();
@@ -66,8 +81,8 @@ function drawLine(x, y, emit = true) {
 
     if (emit) {
         socket.emit("draw", {
-            x: newX,
-            y: newY,
+            x: pos.x,
+            y: pos.y,
             lastX,
             lastY,
             color,
@@ -76,17 +91,15 @@ function drawLine(x, y, emit = true) {
         });
     }
 
-    lastX = newX;
-    lastY = newY;
+    lastX = pos.x;
+    lastY = pos.y;
 }
 
 // 🖱 PC Events
 canvas.addEventListener("mousedown", e => {
     startDrawing(e.clientX, e.clientY);
 });
-
 canvas.addEventListener("mouseup", stopDrawing);
-
 canvas.addEventListener("mousemove", e => {
     drawLine(e.clientX, e.clientY);
 });
@@ -115,12 +128,10 @@ canvas.addEventListener("touchmove", e => {
         const newDistance = getDistance(e.touches);
 
         if (initialDistance) {
-            scale *= newDistance / initialDistance;
+            let zoomFactor = newDistance / initialDistance;
+            scale *= zoomFactor;
             scale = Math.max(0.5, Math.min(scale, 3));
-            canvas.style.transform = `scale(${scale})`;
-
-            document.getElementById("zoomLevel").innerText =
-                Math.round(scale * 100) + "%";
+            applyZoom();
         }
 
         initialDistance = newDistance;
@@ -135,7 +146,7 @@ function getDistance(touches) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-// 👥 Receive Drawing
+// 👥 Receive drawing
 socket.on("draw", data => {
     ctx.beginPath();
     ctx.moveTo(data.lastX, data.lastY);
@@ -146,20 +157,20 @@ socket.on("draw", data => {
     ctx.closePath();
 });
 
-// 👥 User Counter
+// 👥 User counter
 socket.on("userCount", count => {
     document.getElementById("userCount").innerText =
         "Users: " + count;
 });
 
-// 🎨 Color Picker
+// 🎨 Color
 document.getElementById("colorPicker")
     .addEventListener("input", e => {
         color = e.target.value;
         isEraser = false;
     });
 
-// 🖌 Brush Size Slider
+// 🖌 Brush Size
 document.getElementById("brushSize")
     .addEventListener("input", e => {
         brushSize = e.target.value;
@@ -169,19 +180,24 @@ document.getElementById("brushSize")
 function setEraser() {
     isEraser = true;
 }
-
 function setBrush() {
     isEraser = false;
 }
 
 // 🧹 Clear
 function clearBoard() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    scale = 1;
+    applyZoom();
     drawBackgroundMessage();
     socket.emit("clear");
 }
 
 socket.on("clear", () => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    scale = 1;
+    applyZoom();
     drawBackgroundMessage();
 });
