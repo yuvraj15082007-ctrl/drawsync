@@ -27,8 +27,6 @@ function resetView() {
     document.getElementById("zoomLevel").innerText = "100%";
 }
 
-/* ========= DRAW ========= */
-
 function drawLine(x0, y0, x1, y1, color, size) {
     ctx.strokeStyle = color;
     ctx.lineWidth = size;
@@ -67,13 +65,11 @@ canvas.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("mouseup", () => drawing = false);
 
-/* ========= TOUCH SUPPORT ========= */
-
 canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
     if (e.touches.length === 1) {
-        drawing = true;
         const rect = canvas.getBoundingClientRect();
+        drawing = true;
         lastX = (e.touches[0].clientX - rect.left - originX) / scale;
         lastY = (e.touches[0].clientY - rect.top - originY) / scale;
     }
@@ -81,9 +77,8 @@ canvas.addEventListener("touchstart", (e) => {
 
 canvas.addEventListener("touchmove", (e) => {
     e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-
     if (e.touches.length === 1 && drawing) {
+        const rect = canvas.getBoundingClientRect();
         let x = (e.touches[0].clientX - rect.left - originX) / scale;
         let y = (e.touches[0].clientY - rect.top - originY) / scale;
 
@@ -97,16 +92,23 @@ canvas.addEventListener("touchmove", (e) => {
         lastX = x;
         lastY = y;
     }
-
 }, { passive: false });
 
 canvas.addEventListener("touchend", () => drawing = false);
 
-/* ========= UI ========= */
+// ================= CLEAR FIX =================
 
-function toggleToolbar() {
-    document.querySelector(".toolbar").classList.toggle("hiddenToolbar");
+function clearBoard() {
+    socket.emit("clearBoard", currentRoom);
 }
+
+socket.on("clearBoard", () => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(scale, 0, 0, scale, originX, originY);
+});
+
+// ================= ROOM UI =================
 
 function createRoom() {
     let pin = prompt("Enter new room PIN:");
@@ -147,23 +149,7 @@ function toggleRoomButtons(inRoom) {
     document.getElementById("quitBtn").style.display = inRoom ? "block" : "none";
 }
 
-function clearBoard() {
-    socket.emit("clearBoard", currentRoom);
-}
-
-function setBrush() {
-    color = document.getElementById("colorPicker").value;
-}
-
-function setEraser() {
-    color = "#ffffff";
-}
-
-function toggleUsers() {
-    document.getElementById("userList").classList.toggle("hidden");
-}
-
-/* ========= SOCKET ========= */
+// ================= SOCKET EVENTS =================
 
 socket.on("draw", (stroke) => {
     drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);

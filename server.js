@@ -29,17 +29,14 @@ io.on("connection", (socket) => {
 
         socket.join(pin);
         socket.room = pin;
-
         rooms[pin].users[socket.id] = name;
 
         socket.emit("loadStrokes", rooms[pin].strokes);
-
-        io.to(pin).emit("notification", `${name} joined`);
         io.to(pin).emit("userList", Object.values(rooms[pin].users));
+        io.to(pin).emit("notification", `${name} joined`);
     });
 
-    socket.on("draw", (data) => {
-        const { pin, stroke } = data;
+    socket.on("draw", ({ pin, stroke }) => {
         if (!rooms[pin]) return;
 
         rooms[pin].strokes.push(stroke);
@@ -48,6 +45,7 @@ io.on("connection", (socket) => {
 
     socket.on("clearBoard", (pin) => {
         if (!rooms[pin]) return;
+
         rooms[pin].strokes = [];
         io.to(pin).emit("clearBoard");
     });
@@ -62,4 +60,6 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log("Server running on port", PORT));
+server.listen(PORT, () => {
+    console.log("Server running on port", PORT);
+});
