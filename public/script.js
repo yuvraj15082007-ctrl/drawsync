@@ -5,10 +5,6 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-let scale = 1;
-let originX = 0;
-let originY = 0;
-
 let drawing = false;
 let color = "#000000";
 let brushSize = 3;
@@ -19,13 +15,7 @@ if (!userName) userName = "Guest";
 
 socket.emit("joinRoom", { pin: "public", name: userName });
 
-function resetView() {
-    scale = 1;
-    originX = 0;
-    originY = 0;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    document.getElementById("zoomLevel").innerText = "100%";
-}
+/* ================= DRAW ================= */
 
 function drawLine(x0, y0, x1, y1, color, size) {
     ctx.strokeStyle = color;
@@ -42,15 +32,15 @@ let lastY = 0;
 
 canvas.addEventListener("mousedown", (e) => {
     drawing = true;
-    lastX = (e.offsetX - originX) / scale;
-    lastY = (e.offsetY - originY) / scale;
+    lastX = e.offsetX;
+    lastY = e.offsetY;
 });
 
 canvas.addEventListener("mousemove", (e) => {
     if (!drawing) return;
 
-    let x = (e.offsetX - originX) / scale;
-    let y = (e.offsetY - originY) / scale;
+    let x = e.offsetX;
+    let y = e.offsetY;
 
     drawLine(lastX, lastY, x, y, color, brushSize);
 
@@ -65,13 +55,15 @@ canvas.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("mouseup", () => drawing = false);
 
+/* ================= TOUCH ================= */
+
 canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
     if (e.touches.length === 1) {
-        const rect = canvas.getBoundingClientRect();
         drawing = true;
-        lastX = (e.touches[0].clientX - rect.left - originX) / scale;
-        lastY = (e.touches[0].clientY - rect.top - originY) / scale;
+        const rect = canvas.getBoundingClientRect();
+        lastX = e.touches[0].clientX - rect.left;
+        lastY = e.touches[0].clientY - rect.top;
     }
 }, { passive: false });
 
@@ -79,8 +71,8 @@ canvas.addEventListener("touchmove", (e) => {
     e.preventDefault();
     if (e.touches.length === 1 && drawing) {
         const rect = canvas.getBoundingClientRect();
-        let x = (e.touches[0].clientX - rect.left - originX) / scale;
-        let y = (e.touches[0].clientY - rect.top - originY) / scale;
+        let x = e.touches[0].clientX - rect.left;
+        let y = e.touches[0].clientY - rect.top;
 
         drawLine(lastX, lastY, x, y, color, brushSize);
 
@@ -96,60 +88,35 @@ canvas.addEventListener("touchmove", (e) => {
 
 canvas.addEventListener("touchend", () => drawing = false);
 
-// ================= CLEAR FIX =================
+/* ================= COLOR + SIZE ================= */
+
+document.getElementById("colorPicker").addEventListener("input", (e) => {
+    color = e.target.value;
+});
+
+document.getElementById("brushSize").addEventListener("input", (e) => {
+    brushSize = parseInt(e.target.value);
+});
+
+function setBrush() {
+    color = document.getElementById("colorPicker").value;
+}
+
+function setEraser() {
+    color = "#ffffff";
+}
+
+/* ================= CLEAR ================= */
 
 function clearBoard() {
     socket.emit("clearBoard", currentRoom);
 }
 
 socket.on("clearBoard", () => {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.setTransform(scale, 0, 0, scale, originX, originY);
 });
 
-// ================= ROOM UI =================
-
-function createRoom() {
-    let pin = prompt("Enter new room PIN:");
-    if (!pin) return;
-
-    currentRoom = pin;
-    resetView();
-    socket.emit("joinRoom", { pin, name: userName });
-
-    document.getElementById("roomInfo").innerText = "Room: " + pin;
-    toggleRoomButtons(true);
-}
-
-function joinRoom() {
-    let pin = prompt("Enter room PIN:");
-    if (!pin) return;
-
-    currentRoom = pin;
-    resetView();
-    socket.emit("joinRoom", { pin, name: userName });
-
-    document.getElementById("roomInfo").innerText = "Room: " + pin;
-    toggleRoomButtons(true);
-}
-
-function quitRoom() {
-    currentRoom = "public";
-    resetView();
-    socket.emit("joinRoom", { pin: "public", name: userName });
-
-    document.getElementById("roomInfo").innerText = "Room: public";
-    toggleRoomButtons(false);
-}
-
-function toggleRoomButtons(inRoom) {
-    document.getElementById("createBtn").style.display = inRoom ? "none" : "block";
-    document.getElementById("joinBtn").style.display = inRoom ? "none" : "block";
-    document.getElementById("quitBtn").style.display = inRoom ? "block" : "none";
-}
-
-// ================= SOCKET EVENTS =================
+/* ================= SOCKET RECEIVE ================= */
 
 socket.on("draw", (stroke) => {
     drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
@@ -164,12 +131,4 @@ socket.on("loadStrokes", (strokes) => {
 
 socket.on("userList", (users) => {
     document.getElementById("userCount").innerText = "Online: " + users.length;
-    document.getElementById("userList").innerHTML =
-        users.map(u => `<div>${u}</div>`).join("");
-});
-
-socket.on("notification", (msg) => {
-    const box = document.getElementById("notifications");
-    box.innerText = msg;
-    setTimeout(() => box.innerText = "", 3000);
 });

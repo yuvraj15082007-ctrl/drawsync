@@ -10,7 +10,6 @@ app.use(express.static("public"));
 
 let rooms = {};
 
-// Default public room
 rooms["public"] = {
     users: {},
     strokes: []
@@ -21,19 +20,16 @@ io.on("connection", (socket) => {
     socket.on("joinRoom", ({ pin, name }) => {
 
         if (!rooms[pin]) {
-            rooms[pin] = {
-                users: {},
-                strokes: []
-            };
+            rooms[pin] = { users: {}, strokes: [] };
         }
 
         socket.join(pin);
         socket.room = pin;
+
         rooms[pin].users[socket.id] = name;
 
         socket.emit("loadStrokes", rooms[pin].strokes);
         io.to(pin).emit("userList", Object.values(rooms[pin].users));
-        io.to(pin).emit("notification", `${name} joined`);
     });
 
     socket.on("draw", ({ pin, stroke }) => {
@@ -59,7 +55,4 @@ io.on("connection", (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => {
-    console.log("Server running on port", PORT);
-});
+server.listen(process.env.PORT || 10000);
