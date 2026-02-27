@@ -1,17 +1,24 @@
 const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+
 const app = express();
-const http = require("http").createServer(app);
-const io = require("socket.io")(http);
+const server = http.createServer(app);
+const io = new Server(server);
 
 app.use(express.static("public"));
 
-let users = 0;
+let users = {};
 
-io.on("connection", (socket) => {
-    users++;
-    io.emit("userCount", users);
+io.on("connection", socket => {
 
-    socket.on("draw", (data) => {
+    socket.on("join", name => {
+        users[socket.id] = name;
+        io.emit("userCount", Object.keys(users).length);
+        io.emit("userList", Object.values(users));
+    });
+
+    socket.on("draw", data => {
         socket.broadcast.emit("draw", data);
     });
 
@@ -20,13 +27,13 @@ io.on("connection", (socket) => {
     });
 
     socket.on("disconnect", () => {
-        users--;
-        io.emit("userCount", users);
+        delete users[socket.id];
+        io.emit("userCount", Object.keys(users).length);
+        io.emit("userList", Object.values(users));
     });
 });
 
-const PORT = process.env.PORT || 3000;
-
-http.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, () => {
+    console.log("Server running on port " + PORT);
 });

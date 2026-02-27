@@ -13,7 +13,12 @@ let lastY = 0;
 let isEraser = false;
 
 let scale = 1;
+let offsetX = 0;
+let offsetY = 0;
+
 let initialDistance = null;
+let lastPanX = 0;
+let lastPanY = 0;
 
 let strokes = [];
 
@@ -21,34 +26,19 @@ ctx.lineCap = "round";
 ctx.lineJoin = "round";
 
 
-// 🎨 Background
-function drawBackgroundMessage() {
-    ctx.save();
-    ctx.globalAlpha = 0.08;
-    ctx.textAlign = "center";
-    ctx.fillStyle = "black";
+// 👤 Ask Name
+let userName = prompt("Enter your name:");
+if (!userName) userName = "Guest";
 
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate(-Math.PI / 8);
-
-    ctx.font = "bold 60px Arial";
-    ctx.fillText("This is for you Someone 💖", 0, -40);
-
-    ctx.font = "bold 40px Arial";
-    ctx.fillText("From Someone", 0, 40);
-
-    ctx.restore();
-}
+socket.emit("join", userName);
 
 
-// 🔄 Redraw Everything (IMPORTANT)
+// 🔄 Redraw
 function redrawCanvas() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-
-    drawBackgroundMessage();
+    ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
 
     strokes.forEach(stroke => {
         ctx.beginPath();
@@ -65,20 +55,20 @@ function redrawCanvas() {
 }
 
 
-// ✏️ Get scaled coordinates
-function getMousePos(x, y) {
+// ✏ Get Position
+function getPos(x, y) {
     const rect = canvas.getBoundingClientRect();
     return {
-        x: (x - rect.left) / scale,
-        y: (y - rect.top) / scale
+        x: (x - rect.left - offsetX) / scale,
+        y: (y - rect.top - offsetY) / scale
     };
 }
 
 
-// ✏️ Drawing
+// ✏ Drawing
 function startDrawing(x, y) {
     drawing = true;
-    const pos = getMousePos(x, y);
+    const pos = getPos(x, y);
     lastX = pos.x;
     lastY = pos.y;
 }
@@ -90,15 +80,7 @@ function stopDrawing() {
 function drawLine(x, y, emit = true) {
     if (!drawing) return;
 
-    const pos = getMousePos(x, y);
-
-    ctx.beginPath();
-    ctx.moveTo(lastX, lastY);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.strokeStyle = isEraser ? "white" : color;
-    ctx.lineWidth = brushSize;
-    ctx.stroke();
-    ctx.closePath();
+    const pos = getPos(x, y);
 
     strokes.push({
         lastX,
@@ -110,16 +92,10 @@ function drawLine(x, y, emit = true) {
         isEraser
     });
 
+    redrawCanvas();
+
     if (emit) {
-        socket.emit("draw", {
-            lastX,
-            lastY,
-            x: pos.x,
-            y: pos.y,
-            color,
-            brushSize,
-            isEraser
-        });
+        socket.emit("draw", strokes[strokes.length - 1]);
     }
 
     lastX = pos.x;
@@ -127,7 +103,7 @@ function drawLine(x, y, emit = true) {
 }
 
 
-// 🖱 PC Events
+// 🖱 Mouse
 canvas.addEventListener("mousedown", e => {
     startDrawing(e.clientX, e.clientY);
 });
@@ -137,8 +113,9 @@ canvas.addEventListener("mousemove", e => {
 });
 
 
-// 📱 Touch Events
+// 📱 Touch
 canvas.addEventListener("touchstart", e => {
+
     if (e.touches.length === 1) {
         const touch = e.touches[0];
         startDrawing(touch.clientX, touch.clientY);
@@ -146,6 +123,8 @@ canvas.addEventListener("touchstart", e => {
 
     if (e.touches.length === 2) {
         initialDistance = getDistance(e.touches);
+        lastPanX = e.touches[0].clientX;
+        lastPanY = e.touches[0].clientY;
     }
 });
 
@@ -160,14 +139,25 @@ canvas.addEventListener("touchmove", e => {
     if (e.touches.length === 2) {
         const newDistance = getDistance(e.touches);
 
+        // Zoom
         if (initialDistance) {
             let zoomFactor = newDistance / initialDistance;
             scale *= zoomFactor;
-            scale = Math.max(0.5, Math.min(scale, 3));
-            redrawCanvas();
+            scale = Math.max(0.5, Math.min(scale, 4));
         }
 
+        // Pan
+        const currentX = e.touches[0].clientX;
+        const currentY = e.touches[0].clientY;
+
+        offsetX += (currentX - lastPanX);
+        offsetY += (currentY - lastPanY);
+
+        lastPanX = currentX;
+        lastPanY = currentY;
+
         initialDistance = newDistance;
+        redrawCanvas();
     }
 });
 
@@ -180,59 +170,45 @@ function getDistance(touches) {
 }
 
 
-// 👥 Receive drawing
+// 👥 Socket Receive
 socket.on("draw", data => {
     strokes.push(data);
     redrawCanvas();
 });
 
-
-// 👥 User counter
 socket.on("userCount", count => {
     document.getElementById("userCount").innerText =
         "Users: " + count;
 });
 
-
-// 🎨 Color Picker
-document.getElementById("colorPicker")
-    .addEventListener("input", e => {
-        color = e.target.value;
-        isEraser = false;
-    });
+socket.on("userList", list => {
+    document.getElementById("userList").innerText =
+        "Online: " + list.join(", ");
+});
 
 
-// 🖌 Brush Size
-document.getElementById("brushSize")
-    .addEventListener("input", e => {
-        brushSize = e.target.value;
-    });
-
-
-// 🧽 Tools
-function setEraser() {
-    isEraser = true;
-}
-
-function setBrush() {
+// 🎨 Tools
+document.getElementById("colorPicker").addEventListener("input", e => {
+    color = e.target.value;
     isEraser = false;
-}
+});
 
+document.getElementById("brushSize").addEventListener("input", e => {
+    brushSize = e.target.value;
+});
 
-// 🧹 Clear
+function setEraser() { isEraser = true; }
+function setBrush() { isEraser = false; }
+
 function clearBoard() {
     strokes = [];
-    scale = 1;
     redrawCanvas();
     socket.emit("clear");
 }
 
 socket.on("clear", () => {
     strokes = [];
-    scale = 1;
     redrawCanvas();
 });
 
-
-// Initial draw
 redrawCanvas();
