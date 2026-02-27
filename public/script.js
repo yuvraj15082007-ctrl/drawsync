@@ -5,6 +5,9 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+let strokes = [];
+let currentRoom = null;
+
 let drawing = false;
 let color = "black";
 let brushSize = 3;
@@ -20,8 +23,6 @@ let initialDistance = null;
 let lastPanX = 0;
 let lastPanY = 0;
 
-let strokes = [];
-
 ctx.lineCap = "round";
 ctx.lineJoin = "round";
 
@@ -30,10 +31,44 @@ ctx.lineJoin = "round";
 let userName = prompt("Enter your name:");
 if (!userName) userName = "Guest";
 
-socket.emit("join", userName);
+
+// ============================
+// ROOM FUNCTIONS
+// ============================
+
+function createRoom() {
+    socket.emit("createRoom", userName);
+}
+
+function joinRoom() {
+    const pin = prompt("Enter Room PIN:");
+    if (pin) {
+        socket.emit("joinRoom", { pin, name: userName });
+    }
+}
+
+socket.on("roomCreated", pin => {
+    currentRoom = pin;
+    strokes = [];
+    redrawCanvas();
+    document.getElementById("roomInfo").innerText =
+        "Room PIN: " + pin;
+});
+
+socket.on("roomError", msg => {
+    alert(msg);
+});
+
+socket.on("loadStrokes", data => {
+    strokes = data;
+    redrawCanvas();
+});
 
 
-// 🔄 Redraw
+// ============================
+// DRAWING SYSTEM
+// ============================
+
 function redrawCanvas() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -54,8 +89,6 @@ function redrawCanvas() {
         Math.round(scale * 100) + "%";
 }
 
-
-// ✏ Get Position
 function getPos(x, y) {
     const rect = canvas.getBoundingClientRect();
     return {
@@ -64,9 +97,8 @@ function getPos(x, y) {
     };
 }
 
-
-// ✏ Drawing
 function startDrawing(x, y) {
+    if (!currentRoom) return alert("Join or create a room first!");
     drawing = true;
     const pos = getPos(x, y);
     lastX = pos.x;
@@ -82,7 +114,7 @@ function drawLine(x, y, emit = true) {
 
     const pos = getPos(x, y);
 
-    strokes.push({
+    const stroke = {
         lastX,
         lastY,
         x: pos.x,
@@ -90,12 +122,16 @@ function drawLine(x, y, emit = true) {
         color,
         brushSize,
         isEraser
-    });
+    };
 
+    strokes.push(stroke);
     redrawCanvas();
 
-    if (emit) {
-        socket.emit("draw", strokes[strokes.length - 1]);
+    if (emit && currentRoom) {
+        socket.emit("draw", {
+            pin: currentRoom,
+            stroke
+        });
     }
 
     lastX = pos.x;
@@ -103,17 +139,25 @@ function drawLine(x, y, emit = true) {
 }
 
 
-// 🖱 Mouse
+// ============================
+// MOUSE EVENTS
+// ============================
+
 canvas.addEventListener("mousedown", e => {
     startDrawing(e.clientX, e.clientY);
 });
+
 canvas.addEventListener("mouseup", stopDrawing);
+
 canvas.addEventListener("mousemove", e => {
     drawLine(e.clientX, e.clientY);
 });
 
 
-// 📱 Touch
+// ============================
+// TOUCH EVENTS (Zoom + Pan)
+// ============================
+
 canvas.addEventListener("touchstart", e => {
 
     if (e.touches.length === 1) {
@@ -170,34 +214,46 @@ function getDistance(touches) {
 }
 
 
-// 👥 Socket Receive
-socket.on("draw", data => {
-    strokes.push(data);
+// ============================
+// SOCKET RECEIVE
+// ============================
+
+socket.on("draw", stroke => {
+    strokes.push(stroke);
     redrawCanvas();
 });
 
-socket.on("userCount", count => {
-    document.getElementById("userCount").innerText =
-        "Online: " + count;
+socket.on("clear", () => {
+    strokes = [];
+    redrawCanvas();
 });
 
 socket.on("userList", list => {
-    const userListDiv = document.getElementById("userList");
-    userListDiv.innerHTML = "";
-
+    const div = document.getElementById("userList");
+    div.innerHTML = "";
     list.forEach(name => {
-        const div = document.createElement("div");
-        div.innerText = name;
-        userListDiv.appendChild(div);
+        const p = document.createElement("div");
+        p.innerText = name;
+        div.appendChild(p);
     });
 });
-function toggleUsers() {
-    const userList = document.getElementById("userList");
-    userList.classList.toggle("hidden");
-}
+
+socket.on("notification", msg => {
+    const box = document.getElementById("notifications");
+    const p = document.createElement("div");
+    p.innerText = msg;
+    box.appendChild(p);
+
+    setTimeout(() => {
+        p.remove();
+    }, 4000);
+});
 
 
-// 🎨 Tools
+// ============================
+// TOOLS
+// ============================
+
 document.getElementById("colorPicker").addEventListener("input", e => {
     color = e.target.value;
     isEraser = false;
@@ -211,14 +267,15 @@ function setEraser() { isEraser = true; }
 function setBrush() { isEraser = false; }
 
 function clearBoard() {
+    if (!currentRoom) return;
     strokes = [];
     redrawCanvas();
-    socket.emit("clear");
+    socket.emit("clear", currentRoom);
 }
 
-socket.on("clear", () => {
-    strokes = [];
-    redrawCanvas();
-});
+function toggleUsers() {
+    document.getElementById("userList")
+        .classList.toggle("hidden");
+}
 
 redrawCanvas();
