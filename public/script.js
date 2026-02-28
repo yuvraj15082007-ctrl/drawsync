@@ -18,11 +18,13 @@ if (!userName) userName = "Guest";
 
 socket.emit("joinRoom", { pin: "public", name: userName });
 
-/* ===== Layout Fix (Chat on Top) ===== */
+/* ===== Layout Resize ===== */
 
 function resizeCanvasArea() {
     const toolbarHeight = document.querySelector(".toolbar").offsetHeight;
     const chatHeight = document.querySelector(".chatBox").offsetHeight;
+
+    document.querySelector(".chatBox").style.top = toolbarHeight + "px";
 
     canvas.style.top = (toolbarHeight + chatHeight) + "px";
     canvas.style.height =
@@ -48,7 +50,6 @@ function drawLine(x0, y0, x1, y1, color, size) {
     ctx.lineWidth = size;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     ctx.lineTo(x1, y1);
@@ -57,7 +58,7 @@ function drawLine(x0, y0, x1, y1, color, size) {
 
 let lastX, lastY;
 
-/* ===== MOUSE EVENTS ===== */
+/* ===== Mouse ===== */
 
 canvas.addEventListener("mousedown", (e) => {
     drawing = true;
@@ -84,12 +85,11 @@ canvas.addEventListener("mousemove", (e) => {
 canvas.addEventListener("mouseup", () => drawing = false);
 canvas.addEventListener("mouseleave", () => drawing = false);
 
-/* ===== TOUCH EVENTS ===== */
+/* ===== Touch ===== */
 
 canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
     drawing = true;
-
     const touch = e.touches[0];
     const pos = getPos(touch.clientX, touch.clientY);
     lastX = pos.x;
@@ -116,7 +116,7 @@ canvas.addEventListener("touchmove", (e) => {
 
 canvas.addEventListener("touchend", () => drawing = false);
 
-/* ===== CLEAR ===== */
+/* ===== Clear ===== */
 
 function clearBoard() {
     socket.emit("clearBoard", currentRoom);
@@ -126,7 +126,7 @@ socket.on("clearBoard", () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 });
 
-/* ===== SOCKET RECEIVE ===== */
+/* ===== Receive ===== */
 
 socket.on("draw", (stroke) => {
     drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
@@ -144,7 +144,7 @@ socket.on("updateUsers", (users) => {
         "Online: " + users.length;
 });
 
-/* ===== CHAT ===== */
+/* ===== Chat ===== */
 
 function sendMessage() {
     const input = document.getElementById("chatInput");
@@ -164,7 +164,7 @@ socket.on("chatMessage", (data) => {
     setTimeout(() => div.remove(), 30000);
 });
 
-/* ===== COLOR + SIZE ===== */
+/* ===== Color + Size ===== */
 
 document.getElementById("colorPicker").addEventListener("input", e => {
     color = e.target.value;
