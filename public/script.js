@@ -18,24 +18,28 @@ if (!userName) userName = "Guest";
 
 socket.emit("joinRoom", { pin: "public", name: userName });
 
+/* ===== Layout Fix (Chat on Top) ===== */
+
 function resizeCanvasArea() {
     const toolbarHeight = document.querySelector(".toolbar").offsetHeight;
     const chatHeight = document.querySelector(".chatBox").offsetHeight;
-    const availableHeight = window.innerHeight - toolbarHeight - chatHeight;
 
-    canvas.style.top = toolbarHeight + "px";
-    canvas.style.height = availableHeight + "px";
+    canvas.style.top = (toolbarHeight + chatHeight) + "px";
+    canvas.style.height =
+        (window.innerHeight - toolbarHeight - chatHeight) + "px";
     canvas.style.width = "100vw";
 }
 
 resizeCanvasArea();
 window.addEventListener("resize", resizeCanvasArea);
 
-function getPos(e) {
+/* ===== Position Helper ===== */
+
+function getPos(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     return {
-        x: (e.clientX - rect.left) * (canvas.width / rect.width),
-        y: (e.clientY - rect.top) * (canvas.height / rect.height)
+        x: (clientX - rect.left) * (canvas.width / rect.width),
+        y: (clientY - rect.top) * (canvas.height / rect.height)
     };
 }
 
@@ -43,6 +47,8 @@ function drawLine(x0, y0, x1, y1, color, size) {
     ctx.strokeStyle = color;
     ctx.lineWidth = size;
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     ctx.lineTo(x1, y1);
@@ -51,16 +57,18 @@ function drawLine(x0, y0, x1, y1, color, size) {
 
 let lastX, lastY;
 
+/* ===== MOUSE EVENTS ===== */
+
 canvas.addEventListener("mousedown", (e) => {
     drawing = true;
-    const pos = getPos(e);
+    const pos = getPos(e.clientX, e.clientY);
     lastX = pos.x;
     lastY = pos.y;
 });
 
 canvas.addEventListener("mousemove", (e) => {
     if (!drawing) return;
-    const pos = getPos(e);
+    const pos = getPos(e.clientX, e.clientY);
 
     drawLine(lastX, lastY, pos.x, pos.y, color, brushSize);
 
@@ -74,6 +82,41 @@ canvas.addEventListener("mousemove", (e) => {
 });
 
 canvas.addEventListener("mouseup", () => drawing = false);
+canvas.addEventListener("mouseleave", () => drawing = false);
+
+/* ===== TOUCH EVENTS ===== */
+
+canvas.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    drawing = true;
+
+    const touch = e.touches[0];
+    const pos = getPos(touch.clientX, touch.clientY);
+    lastX = pos.x;
+    lastY = pos.y;
+}, { passive: false });
+
+canvas.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    if (!drawing) return;
+
+    const touch = e.touches[0];
+    const pos = getPos(touch.clientX, touch.clientY);
+
+    drawLine(lastX, lastY, pos.x, pos.y, color, brushSize);
+
+    socket.emit("draw", {
+        pin: currentRoom,
+        stroke: { x0: lastX, y0: lastY, x1: pos.x, y1: pos.y, color, size: brushSize }
+    });
+
+    lastX = pos.x;
+    lastY = pos.y;
+}, { passive: false });
+
+canvas.addEventListener("touchend", () => drawing = false);
+
+/* ===== CLEAR ===== */
 
 function clearBoard() {
     socket.emit("clearBoard", currentRoom);
@@ -82,6 +125,8 @@ function clearBoard() {
 socket.on("clearBoard", () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 });
+
+/* ===== SOCKET RECEIVE ===== */
 
 socket.on("draw", (stroke) => {
     drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
@@ -95,10 +140,11 @@ socket.on("loadStrokes", (strokes) => {
 });
 
 socket.on("updateUsers", (users) => {
-    document.getElementById("userCount").innerText = "Online: " + users.length;
+    document.getElementById("userCount").innerText =
+        "Online: " + users.length;
 });
 
-/* CHAT */
+/* ===== CHAT ===== */
 
 function sendMessage() {
     const input = document.getElementById("chatInput");
@@ -117,6 +163,8 @@ socket.on("chatMessage", (data) => {
 
     setTimeout(() => div.remove(), 30000);
 });
+
+/* ===== COLOR + SIZE ===== */
 
 document.getElementById("colorPicker").addEventListener("input", e => {
     color = e.target.value;
