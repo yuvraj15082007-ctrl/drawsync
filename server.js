@@ -8,11 +8,8 @@ const io = new Server(server);
 
 app.use(express.static("public"));
 
-let rooms = {};
-
-rooms["public"] = {
-    users: {},
-    strokes: []
+let rooms = {
+    public: { users: {}, strokes: [] }
 };
 
 io.on("connection", (socket) => {

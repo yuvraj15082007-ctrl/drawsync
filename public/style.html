@@ -1,15 +1,9 @@
 html, body {
     margin: 0;
     padding: 0;
-    overflow: hidden;
     font-family: Arial;
-}
-
-canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    background: #fff;
+    height: 100%;
+    overflow: hidden;
 }
 
 .toolbar {
@@ -29,12 +23,19 @@ canvas {
     left: 0;
     width: 100%;
     background: #222;
-    padding: 10px;
     color: white;
+    padding: 10px;
+    z-index: 10;
 }
 
 #messages {
-    max-height: 100px;
+    max-height: 80px;
     overflow-y: auto;
     margin-bottom: 5px;
+}
+
+canvas {
+    position: absolute;
+    left: 0;
+    background: white;
 }

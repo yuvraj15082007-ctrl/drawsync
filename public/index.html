@@ -16,21 +16,21 @@
     <button onclick="setEraser()">Eraser</button>
     <button onclick="clearBoard()">Clear</button>
 
-    <button id="createBtn" onclick="createRoom()">Create Room</button>
-    <button id="joinBtn" onclick="joinRoom()">Join Room</button>
-    <button id="quitBtn" onclick="quitRoom()" style="display:none;">Quit Room</button>
+    <button onclick="createRoom()">Create Room</button>
+    <button onclick="joinRoom()">Join Room</button>
+    <button onclick="quitRoom()">Quit Room</button>
 
     <div id="roomInfo">Room: public</div>
     <div id="userCount">Online: 0</div>
 </div>
+
+<canvas id="canvas"></canvas>
 
 <div class="chatBox">
     <div id="messages"></div>
     <input type="text" id="chatInput" placeholder="Type message...">
     <button onclick="sendMessage()">Send</button>
 </div>
-
-<canvas id="canvas"></canvas>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>

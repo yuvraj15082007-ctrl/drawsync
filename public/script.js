@@ -7,8 +7,6 @@ const BOARD_HEIGHT = 1600;
 
 canvas.width = BOARD_WIDTH;
 canvas.height = BOARD_HEIGHT;
-canvas.style.width = "100vw";
-canvas.style.height = "100vh";
 
 let drawing = false;
 let color = "#000000";
@@ -19,6 +17,19 @@ let userName = prompt("Enter your name:");
 if (!userName) userName = "Guest";
 
 socket.emit("joinRoom", { pin: "public", name: userName });
+
+function resizeCanvasArea() {
+    const toolbarHeight = document.querySelector(".toolbar").offsetHeight;
+    const chatHeight = document.querySelector(".chatBox").offsetHeight;
+    const availableHeight = window.innerHeight - toolbarHeight - chatHeight;
+
+    canvas.style.top = toolbarHeight + "px";
+    canvas.style.height = availableHeight + "px";
+    canvas.style.width = "100vw";
+}
+
+resizeCanvasArea();
+window.addEventListener("resize", resizeCanvasArea);
 
 function getPos(e) {
     const rect = canvas.getBoundingClientRect();
@@ -50,6 +61,7 @@ canvas.addEventListener("mousedown", (e) => {
 canvas.addEventListener("mousemove", (e) => {
     if (!drawing) return;
     const pos = getPos(e);
+
     drawLine(lastX, lastY, pos.x, pos.y, color, brushSize);
 
     socket.emit("draw", {
@@ -82,11 +94,35 @@ socket.on("loadStrokes", (strokes) => {
     );
 });
 
-document.getElementById("colorPicker").addEventListener("input", (e) => {
+socket.on("updateUsers", (users) => {
+    document.getElementById("userCount").innerText = "Online: " + users.length;
+});
+
+/* CHAT */
+
+function sendMessage() {
+    const input = document.getElementById("chatInput");
+    const message = input.value.trim();
+    if (!message) return;
+
+    socket.emit("chatMessage", { pin: currentRoom, message });
+    input.value = "";
+}
+
+socket.on("chatMessage", (data) => {
+    const box = document.getElementById("messages");
+    const div = document.createElement("div");
+    div.innerHTML = `<b>${data.name}:</b> ${data.message}`;
+    box.appendChild(div);
+
+    setTimeout(() => div.remove(), 30000);
+});
+
+document.getElementById("colorPicker").addEventListener("input", e => {
     color = e.target.value;
 });
 
-document.getElementById("brushSize").addEventListener("input", (e) => {
+document.getElementById("brushSize").addEventListener("input", e => {
     brushSize = parseInt(e.target.value);
 });
 
@@ -103,7 +139,6 @@ function createRoom() {
     if (!pin) return;
     currentRoom = pin;
     socket.emit("joinRoom", { pin, name: userName });
-    document.getElementById("roomInfo").innerText = "Room: " + pin;
 }
 
 function joinRoom() {
@@ -111,41 +146,9 @@ function joinRoom() {
     if (!pin) return;
     currentRoom = pin;
     socket.emit("joinRoom", { pin, name: userName });
-    document.getElementById("roomInfo").innerText = "Room: " + pin;
 }
 
 function quitRoom() {
     currentRoom = "public";
     socket.emit("joinRoom", { pin: "public", name: userName });
-    document.getElementById("roomInfo").innerText = "Room: public";
 }
-
-socket.on("updateUsers", (users) => {
-    document.getElementById("userCount").innerText = "Online: " + users.length;
-});
-
-/* ===== CHAT ===== */
-
-function sendMessage() {
-    const input = document.getElementById("chatInput");
-    const message = input.value.trim();
-    if (!message) return;
-
-    socket.emit("chatMessage", {
-        pin: currentRoom,
-        message
-    });
-
-    input.value = "";
-}
-
-socket.on("chatMessage", (data) => {
-    const box = document.getElementById("messages");
-    const div = document.createElement("div");
-    div.innerHTML = `<b>${data.name}:</b> ${data.message}`;
-    box.appendChild(div);
-
-    setTimeout(() => {
-        div.remove();
-    }, 30000);
-});
