@@ -2,8 +2,13 @@ const socket = io();
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+const BOARD_WIDTH = 900;
+const BOARD_HEIGHT = 1600;
+
+canvas.width = BOARD_WIDTH;
+canvas.height = BOARD_HEIGHT;
+canvas.style.width = "100vw";
+canvas.style.height = "100vh";
 
 let drawing = false;
 let color = "#000000";
@@ -15,7 +20,13 @@ if (!userName) userName = "Guest";
 
 socket.emit("joinRoom", { pin: "public", name: userName });
 
-/* ================= DRAW ================= */
+function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (e.clientX - rect.left) * (canvas.width / rect.width),
+        y: (e.clientY - rect.top) * (canvas.height / rect.height)
+    };
+}
 
 function drawLine(x0, y0, x1, y1, color, size) {
     ctx.strokeStyle = color;
@@ -27,68 +38,49 @@ function drawLine(x0, y0, x1, y1, color, size) {
     ctx.stroke();
 }
 
-let lastX = 0;
-let lastY = 0;
+let lastX, lastY;
 
 canvas.addEventListener("mousedown", (e) => {
     drawing = true;
-    lastX = e.offsetX;
-    lastY = e.offsetY;
+    const pos = getPos(e);
+    lastX = pos.x;
+    lastY = pos.y;
 });
 
 canvas.addEventListener("mousemove", (e) => {
     if (!drawing) return;
-
-    let x = e.offsetX;
-    let y = e.offsetY;
-
-    drawLine(lastX, lastY, x, y, color, brushSize);
+    const pos = getPos(e);
+    drawLine(lastX, lastY, pos.x, pos.y, color, brushSize);
 
     socket.emit("draw", {
         pin: currentRoom,
-        stroke: { x0: lastX, y0: lastY, x1: x, y1: y, color, size: brushSize }
+        stroke: { x0: lastX, y0: lastY, x1: pos.x, y1: pos.y, color, size: brushSize }
     });
 
-    lastX = x;
-    lastY = y;
+    lastX = pos.x;
+    lastY = pos.y;
 });
 
 canvas.addEventListener("mouseup", () => drawing = false);
 
-/* ================= TOUCH ================= */
+function clearBoard() {
+    socket.emit("clearBoard", currentRoom);
+}
 
-canvas.addEventListener("touchstart", (e) => {
-    e.preventDefault();
-    if (e.touches.length === 1) {
-        drawing = true;
-        const rect = canvas.getBoundingClientRect();
-        lastX = e.touches[0].clientX - rect.left;
-        lastY = e.touches[0].clientY - rect.top;
-    }
-}, { passive: false });
+socket.on("clearBoard", () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+});
 
-canvas.addEventListener("touchmove", (e) => {
-    e.preventDefault();
-    if (e.touches.length === 1 && drawing) {
-        const rect = canvas.getBoundingClientRect();
-        let x = e.touches[0].clientX - rect.left;
-        let y = e.touches[0].clientY - rect.top;
+socket.on("draw", (stroke) => {
+    drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
+});
 
-        drawLine(lastX, lastY, x, y, color, brushSize);
-
-        socket.emit("draw", {
-            pin: currentRoom,
-            stroke: { x0: lastX, y0: lastY, x1: x, y1: y, color, size: brushSize }
-        });
-
-        lastX = x;
-        lastY = y;
-    }
-}, { passive: false });
-
-canvas.addEventListener("touchend", () => drawing = false);
-
-/* ================= COLOR + SIZE ================= */
+socket.on("loadStrokes", (strokes) => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    strokes.forEach(s =>
+        drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size)
+    );
+});
 
 document.getElementById("colorPicker").addEventListener("input", (e) => {
     color = e.target.value;
@@ -106,29 +98,54 @@ function setEraser() {
     color = "#ffffff";
 }
 
-/* ================= CLEAR ================= */
-
-function clearBoard() {
-    socket.emit("clearBoard", currentRoom);
+function createRoom() {
+    let pin = prompt("Enter new room PIN:");
+    if (!pin) return;
+    currentRoom = pin;
+    socket.emit("joinRoom", { pin, name: userName });
+    document.getElementById("roomInfo").innerText = "Room: " + pin;
 }
 
-socket.on("clearBoard", () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-});
+function joinRoom() {
+    let pin = prompt("Enter room PIN:");
+    if (!pin) return;
+    currentRoom = pin;
+    socket.emit("joinRoom", { pin, name: userName });
+    document.getElementById("roomInfo").innerText = "Room: " + pin;
+}
 
-/* ================= SOCKET RECEIVE ================= */
+function quitRoom() {
+    currentRoom = "public";
+    socket.emit("joinRoom", { pin: "public", name: userName });
+    document.getElementById("roomInfo").innerText = "Room: public";
+}
 
-socket.on("draw", (stroke) => {
-    drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
-});
-
-socket.on("loadStrokes", (strokes) => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    strokes.forEach(s =>
-        drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size)
-    );
-});
-
-socket.on("userList", (users) => {
+socket.on("updateUsers", (users) => {
     document.getElementById("userCount").innerText = "Online: " + users.length;
+});
+
+/* ===== CHAT ===== */
+
+function sendMessage() {
+    const input = document.getElementById("chatInput");
+    const message = input.value.trim();
+    if (!message) return;
+
+    socket.emit("chatMessage", {
+        pin: currentRoom,
+        message
+    });
+
+    input.value = "";
+}
+
+socket.on("chatMessage", (data) => {
+    const box = document.getElementById("messages");
+    const div = document.createElement("div");
+    div.innerHTML = `<b>${data.name}:</b> ${data.message}`;
+    box.appendChild(div);
+
+    setTimeout(() => {
+        div.remove();
+    }, 30000);
 });

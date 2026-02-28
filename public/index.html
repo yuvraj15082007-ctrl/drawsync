@@ -6,15 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.html">
 </head>
-
 <body>
 
-<div id="toolbarToggle" onclick="toggleToolbar()">☰</div>
-
-<div class="toolbar hiddenToolbar">
-
-    <h3>DrawSync</h3>
-
+<div class="toolbar">
     <input type="color" id="colorPicker" value="#000000">
     <input type="range" id="brushSize" min="1" max="30" value="3">
 
@@ -22,24 +16,18 @@
     <button onclick="setEraser()">Eraser</button>
     <button onclick="clearBoard()">Clear</button>
 
-    <hr>
-
     <button id="createBtn" onclick="createRoom()">Create Room</button>
     <button id="joinBtn" onclick="joinRoom()">Join Room</button>
     <button id="quitBtn" onclick="quitRoom()" style="display:none;">Quit Room</button>
 
-    <hr>
-
     <div id="roomInfo">Room: public</div>
-    <div id="zoomLevel">100%</div>
+    <div id="userCount">Online: 0</div>
+</div>
 
-    <div id="onlineBox">
-        <div id="userCount" onclick="toggleUsers()">Online: 0</div>
-        <div id="userList" class="hidden"></div>
-    </div>
-
-    <div id="notifications"></div>
-
+<div class="chatBox">
+    <div id="messages"></div>
+    <input type="text" id="chatInput" placeholder="Type message...">
+    <button onclick="sendMessage()">Send</button>
 </div>
 
 <canvas id="canvas"></canvas>
