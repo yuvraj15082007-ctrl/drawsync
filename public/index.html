@@ -20,6 +20,11 @@
     <button onclick="joinRoom()">Join Room</button>
     <button onclick="quitRoom()">Quit Room</button>
 
+    <input type="file" id="bgUpload" accept="image/*" style="display:none;">
+    <button id="bgBtn" onclick="document.getElementById('bgUpload').click()">
+        Public Background
+    </button>
+
     <div id="roomInfo">Room: public</div>
     <div id="userCount">Online: 0</div>
 </div>
@@ -30,6 +35,7 @@
     <button onclick="sendMessage()">Send</button>
 </div>
 
+<div id="bgLayer"></div>
 <canvas id="canvas"></canvas>
 
 <script src="/socket.io/socket.io.js"></script>

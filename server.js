@@ -9,7 +9,7 @@ const io = new Server(server);
 app.use(express.static("public"));
 
 let rooms = {
-    public: { users: {}, strokes: [] }
+    public: { users: {}, strokes: [], background: null }
 };
 
 io.on("connection", (socket) => {
@@ -17,7 +17,7 @@ io.on("connection", (socket) => {
     socket.on("joinRoom", ({ pin, name }) => {
 
         if (!rooms[pin]) {
-            rooms[pin] = { users: {}, strokes: [] };
+            rooms[pin] = { users: {}, strokes: [], background: null };
         }
 
         socket.join(pin);
@@ -25,6 +25,11 @@ io.on("connection", (socket) => {
         rooms[pin].users[socket.id] = name;
 
         socket.emit("loadStrokes", rooms[pin].strokes);
+
+        if (rooms[pin].background) {
+            socket.emit("updateBackground", rooms[pin].background);
+        }
+
         io.to(pin).emit("updateUsers", Object.values(rooms[pin].users));
     });
 
@@ -52,6 +57,19 @@ io.on("connection", (socket) => {
         io.to(pin).emit("chatMessage", {
             name: rooms[pin].users[socket.id],
             message
+        });
+    });
+
+    socket.on("setBackground", ({ pin, imageData }) => {
+
+        if (pin !== "public") return;
+
+        rooms["public"].background = imageData;
+
+        io.to("public").emit("updateBackground", imageData);
+
+        io.to("public").emit("backgroundChanged", {
+            name: rooms["public"].users[socket.id]
         });
     });
 

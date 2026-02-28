@@ -18,8 +18,6 @@ if (!userName) userName = "Guest";
 
 socket.emit("joinRoom", { pin: "public", name: userName });
 
-/* ===== Layout Resize ===== */
-
 function resizeCanvasArea() {
     const toolbarHeight = document.querySelector(".toolbar").offsetHeight;
     const chatHeight = document.querySelector(".chatBox").offsetHeight;
@@ -30,12 +28,15 @@ function resizeCanvasArea() {
     canvas.style.height =
         (window.innerHeight - toolbarHeight - chatHeight) + "px";
     canvas.style.width = "100vw";
+
+    const bgLayer = document.getElementById("bgLayer");
+    bgLayer.style.top = canvas.style.top;
+    bgLayer.style.height = canvas.style.height;
+    bgLayer.style.width = "100vw";
 }
 
 resizeCanvasArea();
 window.addEventListener("resize", resizeCanvasArea);
-
-/* ===== Position Helper ===== */
 
 function getPos(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
@@ -57,8 +58,6 @@ function drawLine(x0, y0, x1, y1, color, size) {
 }
 
 let lastX, lastY;
-
-/* ===== Mouse ===== */
 
 canvas.addEventListener("mousedown", (e) => {
     drawing = true;
@@ -84,8 +83,6 @@ canvas.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("mouseup", () => drawing = false);
 canvas.addEventListener("mouseleave", () => drawing = false);
-
-/* ===== Touch ===== */
 
 canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
@@ -116,18 +113,6 @@ canvas.addEventListener("touchmove", (e) => {
 
 canvas.addEventListener("touchend", () => drawing = false);
 
-/* ===== Clear ===== */
-
-function clearBoard() {
-    socket.emit("clearBoard", currentRoom);
-}
-
-socket.on("clearBoard", () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-});
-
-/* ===== Receive ===== */
-
 socket.on("draw", (stroke) => {
     drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
 });
@@ -144,59 +129,60 @@ socket.on("updateUsers", (users) => {
         "Online: " + users.length;
 });
 
-/* ===== Chat ===== */
+socket.on("updateBackground", (imageData) => {
+    document.getElementById("bgLayer").style.backgroundImage =
+        `url(${imageData})`;
+});
+
+socket.on("backgroundChanged", (data) => {
+    const box = document.getElementById("messages");
+    const div = document.createElement("div");
+    div.innerHTML = `<i>${data.name} changed the public background</i>`;
+    box.appendChild(div);
+    setTimeout(() => div.remove(), 30000);
+});
+
+document.getElementById("bgUpload").addEventListener("change", function () {
+
+    if (currentRoom !== "public") return;
+
+    const file = this.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = function (e) {
+        const img = new Image();
+        img.onload = function () {
+            const tempCanvas = document.createElement("canvas");
+            const tctx = tempCanvas.getContext("2d");
+
+            tempCanvas.width = 900;
+            tempCanvas.height = 1600;
+
+            tctx.drawImage(img, 0, 0, 900, 1600);
+
+            const compressed = tempCanvas.toDataURL("image/jpeg", 0.7);
+
+            socket.emit("setBackground", {
+                pin: "public",
+                imageData: compressed
+            });
+        };
+        img.src = e.target.result;
+    };
+
+    reader.readAsDataURL(file);
+});
+
+function clearBoard() {
+    socket.emit("clearBoard", currentRoom);
+}
 
 function sendMessage() {
     const input = document.getElementById("chatInput");
     const message = input.value.trim();
     if (!message) return;
-
     socket.emit("chatMessage", { pin: currentRoom, message });
     input.value = "";
-}
-
-socket.on("chatMessage", (data) => {
-    const box = document.getElementById("messages");
-    const div = document.createElement("div");
-    div.innerHTML = `<b>${data.name}:</b> ${data.message}`;
-    box.appendChild(div);
-
-    setTimeout(() => div.remove(), 30000);
-});
-
-/* ===== Color + Size ===== */
-
-document.getElementById("colorPicker").addEventListener("input", e => {
-    color = e.target.value;
-});
-
-document.getElementById("brushSize").addEventListener("input", e => {
-    brushSize = parseInt(e.target.value);
-});
-
-function setBrush() {
-    color = document.getElementById("colorPicker").value;
-}
-
-function setEraser() {
-    color = "#ffffff";
-}
-
-function createRoom() {
-    let pin = prompt("Enter new room PIN:");
-    if (!pin) return;
-    currentRoom = pin;
-    socket.emit("joinRoom", { pin, name: userName });
-}
-
-function joinRoom() {
-    let pin = prompt("Enter room PIN:");
-    if (!pin) return;
-    currentRoom = pin;
-    socket.emit("joinRoom", { pin, name: userName });
-}
-
-function quitRoom() {
-    currentRoom = "public";
-    socket.emit("joinRoom", { pin: "public", name: userName });
 }

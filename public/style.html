@@ -6,8 +6,6 @@ html, body {
     overflow: hidden;
 }
 
-/* ===== TOOLBAR ===== */
-
 .toolbar {
     position: fixed;
     top: 0;
@@ -18,8 +16,6 @@ html, body {
     padding: 10px;
     z-index: 10;
 }
-
-/* ===== CHAT (NOW TOP) ===== */
 
 .chatBox {
     position: fixed;
@@ -37,10 +33,18 @@ html, body {
     margin-bottom: 5px;
 }
 
-/* ===== CANVAS ===== */
+#bgLayer {
+    position: absolute;
+    left: 0;
+    background-size: cover;
+    background-position: center;
+    filter: blur(6px);
+    opacity: 0.5;
+    z-index: 0;
+}
 
 canvas {
     position: absolute;
-    left: 0;
-    background: white;
+    z-index: 1;
+    background: transparent;
 }
