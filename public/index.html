@@ -36,29 +36,45 @@
 </head>
 <body>
 
-<div class="toolbar">
-    <input type="color" id="colorPicker" value="#000000">
-    <input type="range" id="brushSize" min="1" max="30" value="3">
+<div class="topbar">
 
-    <button onclick="setBrush()">Brush</button>
-    <button onclick="setEraser()">Eraser</button>
-    <button onclick="clearBoard()">Clear</button>
+<input type="color" id="colorPicker">
 
-    <button onclick="createRoom()">Create Room</button>
-    <button onclick="joinRoom()">Join Room</button>
-    <button onclick="quitRoom()">Quit Room</button>
+<input type="range" id="brushSize" min="1" max="30" value="3">
 
-    <div id="roomInfo">Room: public</div>
-    <div id="userCount">Online: 0</div>
+<button onclick="setBrush()">Brush</button>
+<button onclick="setEraser()">Eraser</button>
+<button onclick="clearBoard()">Clear</button>
+
 </div>
 
-<div class="chatBox">
-    <div id="messages"></div>
-    <input type="text" id="chatInput" placeholder="Type message...">
-    <button onclick="sendMessage()">Send</button>
+
+<div class="roomPanel">
+
+<button onclick="createRoom()">Create</button>
+<button onclick="joinRoom()">Join</button>
+<button onclick="quitRoom()">Quit</button>
+
+<div id="roomInfo">Room: public</div>
+<div id="userCount">Online: 0</div>
+
 </div>
+
 
 <canvas id="canvas"></canvas>
+
+
+<div class="chatBox">
+
+<div id="messages"></div>
+
+<div class="chatInputArea">
+<input type="text" id="chatInput" placeholder="Type message...">
+<button onclick="sendMessage()">Send</button>
+</div>
+
+</div>
+
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
