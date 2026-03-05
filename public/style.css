@@ -222,3 +222,75 @@ top:80px;
 }
 
 }
+/* MOBILE RESPONSIVE FIX */
+
+@media (max-width:700px){
+
+body{
+overflow:hidden;
+}
+
+/* Toolbar mobile */
+
+.toolbar{
+top:10px;
+left:50%;
+transform:translateX(-50%);
+flex-wrap:wrap;
+gap:6px;
+padding:8px 10px;
+max-width:95%;
+justify-content:center;
+}
+
+/* Buttons smaller */
+
+button{
+padding:6px 10px;
+font-size:12px;
+}
+
+/* Brush slider smaller */
+
+#brushSize{
+width:90px;
+}
+
+/* Chat box mobile */
+
+.chatBox{
+
+position:fixed;
+
+bottom:10px;
+left:50%;
+
+transform:translateX(-50%);
+
+width:95%;
+height:200px;
+
+top:auto;
+
+}
+
+/* Messages smaller */
+
+#messages{
+font-size:12px;
+}
+
+/* Input mobile */
+
+#chatInput{
+font-size:13px;
+}
+
+/* Canvas full screen */
+
+#canvas{
+width:100vw;
+height:100vh;
+}
+
+}
