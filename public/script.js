@@ -66,8 +66,11 @@ function getPos(clientX, clientY) {
     };
 }
 
-/* ===== Smooth Brush (quadratic curves) ===== */
-function drawSmoothBrush(pts, c, size) {
+/* ===== Smooth Brush (full stroke redraw) ===== */
+// Snapshot taken BEFORE stroke starts — we redraw full smooth path each move
+let strokeSnapshot = null;
+
+function drawFullStroke(pts, c, size) {
     if (pts.length < 2) return;
     ctx.strokeStyle = c;
     ctx.lineWidth = size;
@@ -79,6 +82,7 @@ function drawSmoothBrush(pts, c, size) {
     if (pts.length === 2) {
         ctx.lineTo(pts[1].x, pts[1].y);
     } else {
+        // Mid-point smoothing over ALL collected points
         for (let i = 1; i < pts.length - 1; i++) {
             const midX = (pts[i].x + pts[i + 1].x) / 2;
             const midY = (pts[i].y + pts[i + 1].y) / 2;
@@ -171,6 +175,7 @@ function startDraw(clientX, clientY) {
 
     if (currentTool === "brush" || currentTool === "eraser") {
         saveSnapshot();
+        strokeSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
         points = [pos];
         lastEmitX = pos.x;
         lastEmitY = pos.y;
@@ -190,13 +195,11 @@ function moveDraw(clientX, clientY) {
     if (currentTool === "brush" || currentTool === "eraser") {
         points.push(pos);
 
-        // Smooth local render - redraw last few points
-        if (points.length >= 2) {
-            const segment = points.slice(Math.max(0, points.length - 4));
-            drawSmoothBrush(segment, drawColor, brushSize);
-        }
+        // Restore snapshot then redraw FULL smooth stroke from scratch
+        if (strokeSnapshot) ctx.putImageData(strokeSnapshot, 0, 0);
+        drawFullStroke(points, drawColor, brushSize);
 
-        // Throttled emit for sync
+        // Throttled emit
         const dx = pos.x - lastEmitX;
         const dy = pos.y - lastEmitY;
         if (Math.sqrt(dx * dx + dy * dy) >= EMIT_THRESHOLD) {
@@ -252,6 +255,7 @@ function endDraw(clientX, clientY) {
     }
 
     points = [];
+    strokeSnapshot = null;
 }
 
 /* ===== Mouse Events ===== */
@@ -397,4 +401,3 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "c") setTool("circle");
     if (e.key === "l") setTool("line");
 });
-        
