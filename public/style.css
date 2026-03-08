@@ -266,6 +266,7 @@ canvas {
     left: 0;
     background: #ffffff;
     touch-action: none;
+    z-index: 1;
 }
 
 /* ===== CHAT ===== */
@@ -455,4 +456,4 @@ canvas {
         right: 16px;
     }
     .room-btn { padding: 5px 8px; font-size: 0.72rem; }
-}
+    }
