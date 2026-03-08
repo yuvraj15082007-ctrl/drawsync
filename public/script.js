@@ -27,7 +27,8 @@ const MAX_UNDO = 40;
 // Smooth brush - point buffer
 let points = [];
 let lastEmitX = 0, lastEmitY = 0;
-const EMIT_THRESHOLD = 3;
+const EMIT_THRESHOLD = 1;
+let currentStrokeId = 0;
 
 /* ===== Name Modal ===== */
 window.addEventListener("load", () => {
@@ -52,6 +53,8 @@ function resizeCanvas() {
     canvas.style.left = "0px";
     canvas.style.width = "100vw";
     canvas.style.height = (window.innerHeight - toolbarH) + "px";
+    // Make canvas fill full width/height visually (logical size stays large for quality)
+    canvas.style.position = "fixed";
 }
 
 resizeCanvas();
@@ -125,10 +128,31 @@ function drawCircle(x0, y0, x1, y1, c, size) {
     ctx.stroke();
 }
 
+/* ===== Remote smooth rendering (per-socket path tracking) ===== */
+// Track ongoing paths per remote user so we can draw smooth curves
+const remotePaths = {}; // socketId -> {path: ctx path open}
+
 /* ===== Render any stroke ===== */
 function renderStroke(s) {
     if (s.type === "brush" || s.type === "line" || !s.type) {
-        drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+        // Smooth continuous line using lineTo on existing path per user
+        const id = s.sid || "remote";
+        if (!remotePaths[id]) {
+            remotePaths[id] = { x: s.x0, y: s.y0 };
+        }
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = s.size;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        // Use quadratic curve for smooth remote rendering too
+        const prev = remotePaths[id];
+        const midX = (prev.x + s.x1) / 2;
+        const midY = (prev.y + s.y1) / 2;
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        ctx.quadraticCurveTo(s.x0, s.y0, s.x1, s.y1);
+        ctx.stroke();
+        remotePaths[id] = { x: s.x1, y: s.y1 };
     } else if (s.type === "rect") {
         drawRect(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
     } else if (s.type === "circle") {
@@ -179,6 +203,7 @@ function startDraw(clientX, clientY) {
         points = [pos];
         lastEmitX = pos.x;
         lastEmitY = pos.y;
+        currentStrokeId++;
     } else {
         saveSnapshot();
         shapeStart = pos;
@@ -211,7 +236,8 @@ function moveDraw(clientX, clientY) {
                     x0: prev.x, y0: prev.y,
                     x1: pos.x, y1: pos.y,
                     color: drawColor,
-                    size: brushSize
+                    size: brushSize,
+                    sid: currentStrokeId   // stroke session id for remote smooth tracking
                 }
             });
             lastEmitX = pos.x;
@@ -401,3 +427,4 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "c") setTool("circle");
     if (e.key === "l") setTool("line");
 });
+    
