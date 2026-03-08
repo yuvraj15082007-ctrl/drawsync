@@ -48,12 +48,10 @@ document.getElementById("nameInput")?.addEventListener("keydown", (e) => {
 
 /* ===== Resize ===== */
 function resizeCanvas() {
-    const toolbarH = document.getElementById("toolbar").offsetHeight;
-    canvas.style.top = toolbarH + "px";
+    canvas.style.top = "0px";
     canvas.style.left = "0px";
     canvas.style.width = "100vw";
-    canvas.style.height = (window.innerHeight - toolbarH) + "px";
-    // Make canvas fill full width/height visually (logical size stays large for quality)
+    canvas.style.height = "100vh";
     canvas.style.position = "fixed";
 }
 
@@ -365,8 +363,17 @@ document.getElementById("colorPicker").addEventListener("input", e => {
 
 document.getElementById("brushSize").addEventListener("input", e => {
     brushSize = parseInt(e.target.value);
-    document.getElementById("sizeLabel").textContent = brushSize + "px";
+    document.getElementById("sizeLabel").textContent = brushSize;
+    document.getElementById("sizePopupVal").textContent = brushSize;
 });
+
+function openSizePopup() {
+    document.getElementById("sizePopup").classList.remove("hidden");
+}
+
+function closeSizePopup() {
+    document.getElementById("sizePopup").classList.add("hidden");
+}
 
 /* ===== Rooms ===== */
 function showRoomModal(title, callback) {
@@ -398,7 +405,8 @@ function createRoom() {
     showRoomModal("Create New Room", (pin) => {
         currentRoom = pin;
         socket.emit("joinRoom", { pin, name: userName });
-        document.getElementById("roomInfo").textContent = "📌 " + pin;
+        document.getElementById("roomInfo").textContent = pin.slice(0,6);
+        document.getElementById("roomInfo").title = "Room: " + pin;
     });
 }
 
@@ -406,14 +414,16 @@ function joinRoom() {
     showRoomModal("Join Room", (pin) => {
         currentRoom = pin;
         socket.emit("joinRoom", { pin, name: userName });
-        document.getElementById("roomInfo").textContent = "📌 " + pin;
+        document.getElementById("roomInfo").textContent = pin.slice(0,6);
+        document.getElementById("roomInfo").title = "Room: " + pin;
     });
 }
 
 function quitRoom() {
     currentRoom = "public";
     socket.emit("joinRoom", { pin: "public", name: userName });
-    document.getElementById("roomInfo").textContent = "📌 public";
+    document.getElementById("roomInfo").textContent = "pub";
+    document.getElementById("roomInfo").title = "Room: public";
 }
 
 /* ===== Keyboard shortcuts ===== */
@@ -427,4 +437,3 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "c") setTool("circle");
     if (e.key === "l") setTool("line");
 });
-    
