@@ -1,11 +1,14 @@
-
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    // Faster ping for real-time feel
+    pingInterval: 5000,
+    pingTimeout: 10000
+});
 
 app.use(express.static("public"));
 
@@ -16,6 +19,12 @@ let rooms = {
 io.on("connection", (socket) => {
 
     socket.on("joinRoom", ({ pin, name }) => {
+        // Leave previous room
+        if (socket.room && rooms[socket.room]) {
+            socket.leave(socket.room);
+            delete rooms[socket.room].users[socket.id];
+            io.to(socket.room).emit("updateUsers", Object.values(rooms[socket.room].users));
+        }
 
         if (!rooms[pin]) {
             rooms[pin] = { users: {}, strokes: [] };
@@ -36,7 +45,11 @@ io.on("connection", (socket) => {
             rooms[pin].strokes.shift();
         }
 
+        // Attach socket id as uid so remote clients can track smooth paths per user
+        stroke.uid = socket.id;
         rooms[pin].strokes.push(stroke);
+
+        // Broadcast to everyone else in room immediately
         socket.to(pin).emit("draw", stroke);
     });
 
@@ -65,4 +78,6 @@ io.on("connection", (socket) => {
     });
 });
 
-server.listen(process.env.PORT || 10000);
+server.listen(process.env.PORT || 10000, () => {
+    console.log("DrawSync running on port", process.env.PORT || 10000);
+});
