@@ -12,17 +12,22 @@ let drawing = false;
 let color = "#000000";
 let brushSize = 3;
 let currentRoom = "public";
-let currentTool = "brush"; // brush | eraser | rect | circle | line
+let currentTool = "brush";
 let userName = "";
 
 // Shape preview
 let shapeStart = null;
 let previewSnapshot = null;
 
-// Undo/Redo stacks (store canvas ImageData)
+// Undo/Redo
 let undoStack = [];
 let redoStack = [];
 const MAX_UNDO = 40;
+
+// Smooth brush - point buffer
+let points = [];
+let lastEmitX = 0, lastEmitY = 0;
+const EMIT_THRESHOLD = 3;
 
 /* ===== Name Modal ===== */
 window.addEventListener("load", () => {
@@ -61,6 +66,29 @@ function getPos(clientX, clientY) {
     };
 }
 
+/* ===== Smooth Brush (quadratic curves) ===== */
+function drawSmoothBrush(pts, c, size) {
+    if (pts.length < 2) return;
+    ctx.strokeStyle = c;
+    ctx.lineWidth = size;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+
+    if (pts.length === 2) {
+        ctx.lineTo(pts[1].x, pts[1].y);
+    } else {
+        for (let i = 1; i < pts.length - 1; i++) {
+            const midX = (pts[i].x + pts[i + 1].x) / 2;
+            const midY = (pts[i].y + pts[i + 1].y) / 2;
+            ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+        }
+        ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+    }
+    ctx.stroke();
+}
+
 /* ===== Draw helpers ===== */
 function drawLine(x0, y0, x1, y1, c, size) {
     ctx.strokeStyle = c;
@@ -76,7 +104,6 @@ function drawLine(x0, y0, x1, y1, c, size) {
 function drawRect(x0, y0, x1, y1, c, size) {
     ctx.strokeStyle = c;
     ctx.lineWidth = size;
-    ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.beginPath();
     ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
@@ -89,10 +116,22 @@ function drawCircle(x0, y0, x1, y1, c, size) {
     const ry = Math.abs(y1 - y0) / 2;
     ctx.strokeStyle = c;
     ctx.lineWidth = size;
-    ctx.lineCap = "round";
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
     ctx.stroke();
+}
+
+/* ===== Render any stroke ===== */
+function renderStroke(s) {
+    if (s.type === "brush" || s.type === "line" || !s.type) {
+        drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+    } else if (s.type === "rect") {
+        drawRect(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+    } else if (s.type === "circle") {
+        drawCircle(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+    } else if (s.type === "shape-line") {
+        drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+    }
 }
 
 /* ===== Undo/Redo ===== */
@@ -125,129 +164,119 @@ function setTool(tool) {
 function setBrush() { setTool("brush"); }
 function setEraser() { setTool("eraser"); }
 
-/* ===== Mouse Events ===== */
-let lastX, lastY;
-
-canvas.addEventListener("mousedown", (e) => {
+/* ===== START ===== */
+function startDraw(clientX, clientY) {
     drawing = true;
-    const pos = getPos(e.clientX, e.clientY);
-    lastX = pos.x;
-    lastY = pos.y;
+    const pos = getPos(clientX, clientY);
 
-    if (currentTool === "rect" || currentTool === "circle" || currentTool === "line") {
+    if (currentTool === "brush" || currentTool === "eraser") {
+        saveSnapshot();
+        points = [pos];
+        lastEmitX = pos.x;
+        lastEmitY = pos.y;
+    } else {
         saveSnapshot();
         shapeStart = pos;
         previewSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    } else {
-        saveSnapshot();
     }
-});
+}
 
-canvas.addEventListener("mousemove", (e) => {
+/* ===== MOVE ===== */
+function moveDraw(clientX, clientY) {
     if (!drawing) return;
-    const pos = getPos(e.clientX, e.clientY);
+    const pos = getPos(clientX, clientY);
     const drawColor = currentTool === "eraser" ? "#ffffff" : color;
 
     if (currentTool === "brush" || currentTool === "eraser") {
-        drawLine(lastX, lastY, pos.x, pos.y, drawColor, brushSize);
-        socket.emit("draw", {
-            pin: currentRoom,
-            stroke: { type: "line", x0: lastX, y0: lastY, x1: pos.x, y1: pos.y, color: drawColor, size: brushSize }
-        });
-        lastX = pos.x;
-        lastY = pos.y;
+        points.push(pos);
+
+        // Smooth local render - redraw last few points
+        if (points.length >= 2) {
+            const segment = points.slice(Math.max(0, points.length - 4));
+            drawSmoothBrush(segment, drawColor, brushSize);
+        }
+
+        // Throttled emit for sync
+        const dx = pos.x - lastEmitX;
+        const dy = pos.y - lastEmitY;
+        if (Math.sqrt(dx * dx + dy * dy) >= EMIT_THRESHOLD) {
+            const prev = points[points.length - 2];
+            socket.emit("draw", {
+                pin: currentRoom,
+                stroke: {
+                    type: "brush",
+                    x0: prev.x, y0: prev.y,
+                    x1: pos.x, y1: pos.y,
+                    color: drawColor,
+                    size: brushSize
+                }
+            });
+            lastEmitX = pos.x;
+            lastEmitY = pos.y;
+        }
+
     } else if (shapeStart && previewSnapshot) {
         ctx.putImageData(previewSnapshot, 0, 0);
         if (currentTool === "rect") drawRect(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
         else if (currentTool === "circle") drawCircle(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
         else if (currentTool === "line") drawLine(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
     }
-});
+}
 
-canvas.addEventListener("mouseup", (e) => {
+/* ===== END ===== */
+function endDraw(clientX, clientY) {
     if (!drawing) return;
     drawing = false;
-    const pos = getPos(e.clientX, e.clientY);
 
     if ((currentTool === "rect" || currentTool === "circle" || currentTool === "line") && shapeStart) {
+        const pos = getPos(clientX, clientY);
+        const typeMap = { rect: "rect", circle: "circle", line: "shape-line" };
+
+        ctx.putImageData(previewSnapshot, 0, 0);
+        if (currentTool === "rect") drawRect(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+        else if (currentTool === "circle") drawCircle(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+        else if (currentTool === "line") drawLine(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+
         socket.emit("draw", {
             pin: currentRoom,
-            stroke: { type: currentTool, x0: shapeStart.x, y0: shapeStart.y, x1: pos.x, y1: pos.y, color, size: brushSize }
+            stroke: {
+                type: typeMap[currentTool],
+                x0: shapeStart.x, y0: shapeStart.y,
+                x1: pos.x, y1: pos.y,
+                color, size: brushSize
+            }
         });
+
         shapeStart = null;
         previewSnapshot = null;
     }
-});
 
-canvas.addEventListener("mouseleave", () => { drawing = false; });
+    points = [];
+}
+
+/* ===== Mouse Events ===== */
+canvas.addEventListener("mousedown",  (e) => startDraw(e.clientX, e.clientY));
+canvas.addEventListener("mousemove",  (e) => moveDraw(e.clientX, e.clientY));
+canvas.addEventListener("mouseup",    (e) => endDraw(e.clientX, e.clientY));
+canvas.addEventListener("mouseleave", ()  => { drawing = false; points = []; });
 
 /* ===== Touch Events ===== */
 canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
-    drawing = true;
-    const touch = e.touches[0];
-    const pos = getPos(touch.clientX, touch.clientY);
-    lastX = pos.x;
-    lastY = pos.y;
-
-    if (currentTool === "rect" || currentTool === "circle" || currentTool === "line") {
-        saveSnapshot();
-        shapeStart = pos;
-        previewSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    } else {
-        saveSnapshot();
-    }
+    const t = e.touches[0];
+    startDraw(t.clientX, t.clientY);
 }, { passive: false });
 
 canvas.addEventListener("touchmove", (e) => {
     e.preventDefault();
-    if (!drawing) return;
-    const touch = e.touches[0];
-    const pos = getPos(touch.clientX, touch.clientY);
-    const drawColor = currentTool === "eraser" ? "#ffffff" : color;
-
-    if (currentTool === "brush" || currentTool === "eraser") {
-        drawLine(lastX, lastY, pos.x, pos.y, drawColor, brushSize);
-        socket.emit("draw", {
-            pin: currentRoom,
-            stroke: { type: "line", x0: lastX, y0: lastY, x1: pos.x, y1: pos.y, color: drawColor, size: brushSize }
-        });
-        lastX = pos.x;
-        lastY = pos.y;
-    } else if (shapeStart && previewSnapshot) {
-        ctx.putImageData(previewSnapshot, 0, 0);
-        if (currentTool === "rect") drawRect(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
-        else if (currentTool === "circle") drawCircle(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
-        else if (currentTool === "line") drawLine(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
-    }
+    const t = e.touches[0];
+    moveDraw(t.clientX, t.clientY);
 }, { passive: false });
 
 canvas.addEventListener("touchend", (e) => {
-    if (!drawing) return;
-    drawing = false;
-
-    if ((currentTool === "rect" || currentTool === "circle" || currentTool === "line") && shapeStart) {
-        const touch = e.changedTouches[0];
-        const pos = getPos(touch.clientX, touch.clientY);
-        socket.emit("draw", {
-            pin: currentRoom,
-            stroke: { type: currentTool, x0: shapeStart.x, y0: shapeStart.y, x1: pos.x, y1: pos.y, color, size: brushSize }
-        });
-        shapeStart = null;
-        previewSnapshot = null;
-    }
+    const t = e.changedTouches[0];
+    endDraw(t.clientX, t.clientY);
 });
-
-/* ===== Render incoming stroke ===== */
-function renderStroke(s) {
-    if (!s.type || s.type === "line") {
-        drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
-    } else if (s.type === "rect") {
-        drawRect(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
-    } else if (s.type === "circle") {
-        drawCircle(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
-    }
-}
 
 /* ===== Clear ===== */
 function clearBoard() {
@@ -295,9 +324,8 @@ socket.on("chatMessage", (data) => {
 
 function toggleChat() {
     document.getElementById("chatBox").classList.toggle("collapsed");
-    const chevron = document.getElementById("chatChevron");
-    chevron.style.transform = document.getElementById("chatBox").classList.contains("collapsed")
-        ? "rotate(180deg)" : "";
+    document.getElementById("chatChevron").style.transform =
+        document.getElementById("chatBox").classList.contains("collapsed") ? "rotate(180deg)" : "";
 }
 
 /* ===== Color + Size ===== */
@@ -369,3 +397,4 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "c") setTool("circle");
     if (e.key === "l") setTool("line");
 });
+        
