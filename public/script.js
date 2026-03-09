@@ -126,39 +126,48 @@ function drawCircle(x0, y0, x1, y1, c, size) {
     ctx.stroke();
 }
 
-/* ===== Remote smooth rendering (per-socket path tracking) ===== */
-// Track ongoing paths per remote user so we can draw smooth curves
-const remotePaths = {}; // socketId -> {path: ctx path open}
+/* ===== Remote smooth rendering ===== */
+// Buffer points per remote stroke (uid+sid), redraw full smooth path like local
+const remoteStrokes = {};
 
 /* ===== Render any stroke ===== */
 function renderStroke(s) {
     if (s.type === "brush" || s.type === "line" || !s.type) {
-        // Smooth continuous line using lineTo on existing path per user
-        const id = s.sid || "remote";
-        if (!remotePaths[id]) {
-            remotePaths[id] = { x: s.x0, y: s.y0 };
+        const key = (s.uid || "r") + "_" + (s.sid || "0");
+
+        if (!remoteStrokes[key]) {
+            // First segment of this stroke — snapshot current canvas as base
+            remoteStrokes[key] = {
+                points: [{ x: s.x0, y: s.y0 }],
+                snapshot: ctx.getImageData(0, 0, canvas.width, canvas.height),
+                color: s.color,
+                size: s.size
+            };
         }
-        ctx.strokeStyle = s.color;
-        ctx.lineWidth = s.size;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        // Use quadratic curve for smooth remote rendering too
-        const prev = remotePaths[id];
-        const midX = (prev.x + s.x1) / 2;
-        const midY = (prev.y + s.y1) / 2;
-        ctx.beginPath();
-        ctx.moveTo(prev.x, prev.y);
-        ctx.quadraticCurveTo(s.x0, s.y0, s.x1, s.y1);
-        ctx.stroke();
-        remotePaths[id] = { x: s.x1, y: s.y1 };
+
+        remoteStrokes[key].points.push({ x: s.x1, y: s.y1 });
+
+        // Restore base snapshot + redraw full smooth stroke — identical to local rendering
+        const rs = remoteStrokes[key];
+        ctx.putImageData(rs.snapshot, 0, 0);
+        drawFullStroke(rs.points, rs.color, rs.size);
+
     } else if (s.type === "rect") {
         drawRect(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+        delete remoteStrokes[(s.uid||"r")+"_"+(s.sid||"0")];
     } else if (s.type === "circle") {
         drawCircle(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+        delete remoteStrokes[(s.uid||"r")+"_"+(s.sid||"0")];
     } else if (s.type === "shape-line") {
         drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+        delete remoteStrokes[(s.uid||"r")+"_"+(s.sid||"0")];
     }
 }
+
+// When remote user lifts pen — clear their buffer so next stroke starts fresh
+socket.on("strokeEnd", ({ uid, sid }) => {
+    delete remoteStrokes[(uid||"r")+"_"+(sid||"0")];
+});
 
 /* ===== Undo/Redo ===== */
 function saveSnapshot() {
@@ -280,13 +289,21 @@ function endDraw(clientX, clientY) {
 
     points = [];
     strokeSnapshot = null;
+
+    // Tell remote clients this stroke is done — so they clear their smooth buffer
+    socket.emit("strokeEnd", { pin: currentRoom, sid: currentStrokeId });
 }
 
 /* ===== Mouse Events ===== */
 canvas.addEventListener("mousedown",  (e) => startDraw(e.clientX, e.clientY));
 canvas.addEventListener("mousemove",  (e) => moveDraw(e.clientX, e.clientY));
 canvas.addEventListener("mouseup",    (e) => endDraw(e.clientX, e.clientY));
-canvas.addEventListener("mouseleave", ()  => { drawing = false; points = []; });
+canvas.addEventListener("mouseleave", () => {
+    if (drawing) socket.emit("strokeEnd", { pin: currentRoom, sid: currentStrokeId });
+    drawing = false;
+    points = [];
+    strokeSnapshot = null;
+});
 
 /* ===== Touch Events ===== */
 canvas.addEventListener("touchstart", (e) => {
@@ -437,3 +454,4 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "c") setTool("circle");
     if (e.key === "l") setTool("line");
 });
+    
