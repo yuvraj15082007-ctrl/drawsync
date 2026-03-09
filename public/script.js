@@ -4,7 +4,6 @@ const ctx = canvas.getContext("2d");
 
 const BOARD_WIDTH = 1600;
 const BOARD_HEIGHT = 3200;
-
 canvas.width = BOARD_WIDTH;
 canvas.height = BOARD_HEIGHT;
 
@@ -15,50 +14,58 @@ let currentRoom = "public";
 let currentTool = "brush";
 let userName = "";
 
-// Shape preview
 let shapeStart = null;
 let previewSnapshot = null;
+let strokeSnapshot = null;
 
-// Undo/Redo
 let undoStack = [];
 let redoStack = [];
-const MAX_UNDO = 40;
+const MAX_UNDO = 30;
 
-// Smooth brush - point buffer
 let points = [];
 let lastEmitX = 0, lastEmitY = 0;
 const EMIT_THRESHOLD = 1;
 let currentStrokeId = 0;
 
+// Remote stroke buffers: uid_sid -> { points, snapshot, color, size }
+const remoteStrokes = {};
+
+/* ===== Canvas fill screen ===== */
+function resizeCanvas() {
+    canvas.style.position = "fixed";
+    canvas.style.top = "0";
+    canvas.style.left = "0";
+    canvas.style.width = "100vw";
+    canvas.style.height = "100vh";
+}
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
 /* ===== Name Modal ===== */
+// DON'T joinRoom on load — wait for user to submit name
 window.addEventListener("load", () => {
-    document.getElementById("nameInput").focus();
+    const el = document.getElementById("nameInput");
+    if (el) el.focus();
 });
 
 function submitName() {
     const input = document.getElementById("nameInput");
     userName = input.value.trim() || "Guest";
     document.getElementById("nameModal").classList.add("hidden");
-    socket.emit("joinRoom", { pin: "public", name: userName });
+    // Only NOW join room after name is set
+    joinRoomSocket("public");
 }
 
 document.getElementById("nameInput")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") submitName();
 });
 
-/* ===== Resize ===== */
-function resizeCanvas() {
-    canvas.style.top = "0px";
-    canvas.style.left = "0px";
-    canvas.style.width = "100vw";
-    canvas.style.height = "100vh";
-    canvas.style.position = "fixed";
+function joinRoomSocket(pin) {
+    currentRoom = pin;
+    socket.emit("joinRoom", { pin, name: userName });
 }
 
-resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
-
-/* ===== Position ===== */
+/* ===== Position helper ===== */
 function getPos(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     return {
@@ -67,10 +74,7 @@ function getPos(clientX, clientY) {
     };
 }
 
-/* ===== Smooth Brush (full stroke redraw) ===== */
-// Snapshot taken BEFORE stroke starts — we redraw full smooth path each move
-let strokeSnapshot = null;
-
+/* ===== Draw helpers ===== */
 function drawFullStroke(pts, c, size) {
     if (pts.length < 2) return;
     ctx.strokeStyle = c;
@@ -79,11 +83,9 @@ function drawFullStroke(pts, c, size) {
     ctx.lineJoin = "round";
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
-
     if (pts.length === 2) {
         ctx.lineTo(pts[1].x, pts[1].y);
     } else {
-        // Mid-point smoothing over ALL collected points
         for (let i = 1; i < pts.length - 1; i++) {
             const midX = (pts[i].x + pts[i + 1].x) / 2;
             const midY = (pts[i].y + pts[i + 1].y) / 2;
@@ -94,7 +96,6 @@ function drawFullStroke(pts, c, size) {
     ctx.stroke();
 }
 
-/* ===== Draw helpers ===== */
 function drawLine(x0, y0, x1, y1, c, size) {
     ctx.strokeStyle = c;
     ctx.lineWidth = size;
@@ -115,10 +116,8 @@ function drawRect(x0, y0, x1, y1, c, size) {
 }
 
 function drawCircle(x0, y0, x1, y1, c, size) {
-    const cx = (x0 + x1) / 2;
-    const cy = (y0 + y1) / 2;
-    const rx = Math.abs(x1 - x0) / 2;
-    const ry = Math.abs(y1 - y0) / 2;
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const rx = Math.abs(x1 - x0) / 2, ry = Math.abs(y1 - y0) / 2;
     ctx.strokeStyle = c;
     ctx.lineWidth = size;
     ctx.beginPath();
@@ -126,17 +125,11 @@ function drawCircle(x0, y0, x1, y1, c, size) {
     ctx.stroke();
 }
 
-/* ===== Remote smooth rendering ===== */
-// Buffer points per remote stroke (uid+sid), redraw full smooth path like local
-const remoteStrokes = {};
-
-/* ===== Render any stroke ===== */
+/* ===== Render remote stroke ===== */
 function renderStroke(s) {
-    if (s.type === "brush" || s.type === "line" || !s.type) {
+    if (s.type === "brush" || !s.type) {
         const key = (s.uid || "r") + "_" + (s.sid || "0");
-
         if (!remoteStrokes[key]) {
-            // First segment of this stroke — snapshot current canvas as base
             remoteStrokes[key] = {
                 points: [{ x: s.x0, y: s.y0 }],
                 snapshot: ctx.getImageData(0, 0, canvas.width, canvas.height),
@@ -144,32 +137,20 @@ function renderStroke(s) {
                 size: s.size
             };
         }
-
         remoteStrokes[key].points.push({ x: s.x1, y: s.y1 });
-
-        // Restore base snapshot + redraw full smooth stroke — identical to local rendering
         const rs = remoteStrokes[key];
         ctx.putImageData(rs.snapshot, 0, 0);
         drawFullStroke(rs.points, rs.color, rs.size);
-
     } else if (s.type === "rect") {
         drawRect(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
-        delete remoteStrokes[(s.uid||"r")+"_"+(s.sid||"0")];
     } else if (s.type === "circle") {
         drawCircle(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
-        delete remoteStrokes[(s.uid||"r")+"_"+(s.sid||"0")];
     } else if (s.type === "shape-line") {
         drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
-        delete remoteStrokes[(s.uid||"r")+"_"+(s.sid||"0")];
     }
 }
 
-// When remote user lifts pen — clear their buffer so next stroke starts fresh
-socket.on("strokeEnd", ({ uid, sid }) => {
-    delete remoteStrokes[(uid||"r")+"_"+(sid||"0")];
-});
-
-/* ===== Undo/Redo ===== */
+/* ===== Undo / Redo ===== */
 function saveSnapshot() {
     undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
     if (undoStack.length > MAX_UNDO) undoStack.shift();
@@ -177,13 +158,13 @@ function saveSnapshot() {
 }
 
 function undoAction() {
-    if (undoStack.length === 0) return;
+    if (!undoStack.length) return;
     redoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
     ctx.putImageData(undoStack.pop(), 0, 0);
 }
 
 function redoAction() {
-    if (redoStack.length === 0) return;
+    if (!redoStack.length) return;
     undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
     ctx.putImageData(redoStack.pop(), 0, 0);
 }
@@ -195,22 +176,20 @@ function setTool(tool) {
     const btn = document.getElementById("btn-" + tool);
     if (btn) btn.classList.add("active");
 }
-
-function setBrush() { setTool("brush"); }
+function setBrush()  { setTool("brush"); }
 function setEraser() { setTool("eraser"); }
 
-/* ===== START ===== */
+/* ===== Drawing ===== */
 function startDraw(clientX, clientY) {
     drawing = true;
     const pos = getPos(clientX, clientY);
-
     if (currentTool === "brush" || currentTool === "eraser") {
         saveSnapshot();
         strokeSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        currentStrokeId++;
         points = [pos];
         lastEmitX = pos.x;
         lastEmitY = pos.y;
-        currentStrokeId++;
     } else {
         saveSnapshot();
         shapeStart = pos;
@@ -218,7 +197,6 @@ function startDraw(clientX, clientY) {
     }
 }
 
-/* ===== MOVE ===== */
 function moveDraw(clientX, clientY) {
     if (!drawing) return;
     const pos = getPos(clientX, clientY);
@@ -226,40 +204,27 @@ function moveDraw(clientX, clientY) {
 
     if (currentTool === "brush" || currentTool === "eraser") {
         points.push(pos);
-
-        // Restore snapshot then redraw FULL smooth stroke from scratch
         if (strokeSnapshot) ctx.putImageData(strokeSnapshot, 0, 0);
         drawFullStroke(points, drawColor, brushSize);
 
-        // Throttled emit
-        const dx = pos.x - lastEmitX;
-        const dy = pos.y - lastEmitY;
+        const dx = pos.x - lastEmitX, dy = pos.y - lastEmitY;
         if (Math.sqrt(dx * dx + dy * dy) >= EMIT_THRESHOLD) {
             const prev = points[points.length - 2];
             socket.emit("draw", {
                 pin: currentRoom,
-                stroke: {
-                    type: "brush",
-                    x0: prev.x, y0: prev.y,
-                    x1: pos.x, y1: pos.y,
-                    color: drawColor,
-                    size: brushSize,
-                    sid: currentStrokeId   // stroke session id for remote smooth tracking
-                }
+                stroke: { type: "brush", x0: prev.x, y0: prev.y, x1: pos.x, y1: pos.y, color: drawColor, size: brushSize, sid: currentStrokeId }
             });
             lastEmitX = pos.x;
             lastEmitY = pos.y;
         }
-
     } else if (shapeStart && previewSnapshot) {
         ctx.putImageData(previewSnapshot, 0, 0);
-        if (currentTool === "rect") drawRect(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
-        else if (currentTool === "circle") drawCircle(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
-        else if (currentTool === "line") drawLine(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+        if (currentTool === "rect")   drawRect(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+        if (currentTool === "circle") drawCircle(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+        if (currentTool === "line")   drawLine(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
     }
 }
 
-/* ===== END ===== */
 function endDraw(clientX, clientY) {
     if (!drawing) return;
     drawing = false;
@@ -267,87 +232,86 @@ function endDraw(clientX, clientY) {
     if ((currentTool === "rect" || currentTool === "circle" || currentTool === "line") && shapeStart) {
         const pos = getPos(clientX, clientY);
         const typeMap = { rect: "rect", circle: "circle", line: "shape-line" };
-
         ctx.putImageData(previewSnapshot, 0, 0);
-        if (currentTool === "rect") drawRect(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
-        else if (currentTool === "circle") drawCircle(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
-        else if (currentTool === "line") drawLine(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
-
-        socket.emit("draw", {
-            pin: currentRoom,
-            stroke: {
-                type: typeMap[currentTool],
-                x0: shapeStart.x, y0: shapeStart.y,
-                x1: pos.x, y1: pos.y,
-                color, size: brushSize
-            }
-        });
-
+        if (currentTool === "rect")   drawRect(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+        if (currentTool === "circle") drawCircle(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+        if (currentTool === "line")   drawLine(shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+        socket.emit("draw", { pin: currentRoom, stroke: { type: typeMap[currentTool], x0: shapeStart.x, y0: shapeStart.y, x1: pos.x, y1: pos.y, color, size: brushSize } });
         shapeStart = null;
         previewSnapshot = null;
+    } else {
+        // Brush stroke done — notify remotes to clear buffer
+        socket.emit("strokeEnd", { pin: currentRoom, sid: currentStrokeId });
     }
 
     points = [];
     strokeSnapshot = null;
-
-    // Tell remote clients this stroke is done — so they clear their smooth buffer
-    socket.emit("strokeEnd", { pin: currentRoom, sid: currentStrokeId });
 }
 
-/* ===== Mouse Events ===== */
-canvas.addEventListener("mousedown",  (e) => startDraw(e.clientX, e.clientY));
-canvas.addEventListener("mousemove",  (e) => moveDraw(e.clientX, e.clientY));
-canvas.addEventListener("mouseup",    (e) => endDraw(e.clientX, e.clientY));
-canvas.addEventListener("mouseleave", () => {
+function cancelDraw() {
     if (drawing) socket.emit("strokeEnd", { pin: currentRoom, sid: currentStrokeId });
     drawing = false;
     points = [];
     strokeSnapshot = null;
-});
-
-/* ===== Touch Events ===== */
-canvas.addEventListener("touchstart", (e) => {
-    e.preventDefault();
-    const t = e.touches[0];
-    startDraw(t.clientX, t.clientY);
-}, { passive: false });
-
-canvas.addEventListener("touchmove", (e) => {
-    e.preventDefault();
-    const t = e.touches[0];
-    moveDraw(t.clientX, t.clientY);
-}, { passive: false });
-
-canvas.addEventListener("touchend", (e) => {
-    const t = e.changedTouches[0];
-    endDraw(t.clientX, t.clientY);
-});
-
-/* ===== Clear ===== */
-function clearBoard() {
-    if (!confirm("Clear the entire board?")) return;
-    socket.emit("clearBoard", currentRoom);
 }
+
+/* ===== Canvas events ===== */
+canvas.addEventListener("mousedown",  e => startDraw(e.clientX, e.clientY));
+canvas.addEventListener("mousemove",  e => moveDraw(e.clientX, e.clientY));
+canvas.addEventListener("mouseup",    e => endDraw(e.clientX, e.clientY));
+canvas.addEventListener("mouseleave", () => cancelDraw());
+
+canvas.addEventListener("touchstart", e => { e.preventDefault(); const t = e.touches[0]; startDraw(t.clientX, t.clientY); }, { passive: false });
+canvas.addEventListener("touchmove",  e => { e.preventDefault(); const t = e.touches[0]; moveDraw(t.clientX, t.clientY); },  { passive: false });
+canvas.addEventListener("touchend",   e => { const t = e.changedTouches[0]; endDraw(t.clientX, t.clientY); });
+canvas.addEventListener("touchcancel",() => cancelDraw());
+
+/* ===== Socket events (defined ONCE at top level) ===== */
+socket.on("draw", stroke => renderStroke(stroke));
+
+socket.on("strokeEnd", ({ uid, sid }) => {
+    delete remoteStrokes[(uid || "r") + "_" + (sid || "0")];
+});
+
+socket.on("loadStrokes", strokes => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Clear remote buffers on room load
+    Object.keys(remoteStrokes).forEach(k => delete remoteStrokes[k]);
+    strokes.forEach(s => {
+        // For saved strokes just draw lines directly (no buffer needed)
+        if (s.type === "brush" || !s.type) drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+        else if (s.type === "rect") drawRect(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+        else if (s.type === "circle") drawCircle(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+        else if (s.type === "shape-line") drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+    });
+});
 
 socket.on("clearBoard", () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     undoStack = [];
     redoStack = [];
+    Object.keys(remoteStrokes).forEach(k => delete remoteStrokes[k]);
 });
 
-/* ===== Socket receive ===== */
-socket.on("draw", (stroke) => {
-    renderStroke(stroke);
+socket.on("updateUsers", users => {
+    const el = document.getElementById("userCount");
+    if (el) el.innerText = "● " + users.length;
 });
 
-socket.on("loadStrokes", (strokes) => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    strokes.forEach(s => renderStroke(s));
+socket.on("chatMessage", data => {
+    const box = document.getElementById("messages");
+    const div = document.createElement("div");
+    div.innerHTML = `<b>${data.name}:</b> ${data.message}`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    setTimeout(() => div.remove(), 30000);
 });
 
-socket.on("updateUsers", (users) => {
-    document.getElementById("userCount").innerText = "● " + users.length + " online";
-});
+/* ===== Clear board ===== */
+function clearBoard() {
+    if (!confirm("Clear the entire board?")) return;
+    socket.emit("clearBoard", currentRoom);
+}
 
 /* ===== Chat ===== */
 function sendMessage() {
@@ -358,39 +322,26 @@ function sendMessage() {
     input.value = "";
 }
 
-socket.on("chatMessage", (data) => {
-    const box = document.getElementById("messages");
-    const div = document.createElement("div");
-    div.innerHTML = `<b>${data.name}:</b> ${data.message}`;
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
-    setTimeout(() => div.remove(), 30000);
-});
-
 function toggleChat() {
-    document.getElementById("chatBox").classList.toggle("collapsed");
-    document.getElementById("chatChevron").style.transform =
-        document.getElementById("chatBox").classList.contains("collapsed") ? "rotate(180deg)" : "";
+    const box = document.getElementById("chatBox");
+    const chevron = document.getElementById("chatChevron");
+    box.classList.toggle("collapsed");
+    if (chevron) chevron.style.transform = box.classList.contains("collapsed") ? "rotate(180deg)" : "";
 }
 
-/* ===== Color + Size ===== */
-document.getElementById("colorPicker").addEventListener("input", e => {
-    color = e.target.value;
-});
+/* ===== Color & Size ===== */
+document.getElementById("colorPicker").addEventListener("input", e => { color = e.target.value; });
 
 document.getElementById("brushSize").addEventListener("input", e => {
     brushSize = parseInt(e.target.value);
-    document.getElementById("sizeLabel").textContent = brushSize;
-    document.getElementById("sizePopupVal").textContent = brushSize;
+    const sl = document.getElementById("sizeLabel");
+    const sp = document.getElementById("sizePopupVal");
+    if (sl) sl.textContent = brushSize;
+    if (sp) sp.textContent = brushSize;
 });
 
-function openSizePopup() {
-    document.getElementById("sizePopup").classList.remove("hidden");
-}
-
-function closeSizePopup() {
-    document.getElementById("sizePopup").classList.add("hidden");
-}
+function openSizePopup()  { document.getElementById("sizePopup").classList.remove("hidden"); }
+function closeSizePopup() { document.getElementById("sizePopup").classList.add("hidden"); }
 
 /* ===== Rooms ===== */
 function showRoomModal(title, callback) {
@@ -406,45 +357,43 @@ function showRoomModal(title, callback) {
             </div>
         </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelector("#roomPinInput").focus();
+    const pinInput = overlay.querySelector("#roomPinInput");
+    pinInput.focus();
     overlay.querySelector("#roomConfirmBtn").onclick = () => {
-        const pin = overlay.querySelector("#roomPinInput").value.trim();
+        const pin = pinInput.value.trim();
         if (!pin) return;
         overlay.remove();
         callback(pin);
     };
-    overlay.querySelector("#roomPinInput").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") overlay.querySelector("#roomConfirmBtn").click();
-    });
+    pinInput.addEventListener("keydown", e => { if (e.key === "Enter") overlay.querySelector("#roomConfirmBtn").click(); });
+}
+
+function updateRoomLabel(pin) {
+    const el = document.getElementById("roomInfo");
+    if (el) { el.textContent = pin.slice(0, 6); el.title = "Room: " + pin; }
 }
 
 function createRoom() {
-    showRoomModal("Create New Room", (pin) => {
-        currentRoom = pin;
-        socket.emit("joinRoom", { pin, name: userName });
-        document.getElementById("roomInfo").textContent = pin.slice(0,6);
-        document.getElementById("roomInfo").title = "Room: " + pin;
+    showRoomModal("Create New Room", pin => {
+        joinRoomSocket(pin);
+        updateRoomLabel(pin);
     });
 }
 
 function joinRoom() {
-    showRoomModal("Join Room", (pin) => {
-        currentRoom = pin;
-        socket.emit("joinRoom", { pin, name: userName });
-        document.getElementById("roomInfo").textContent = pin.slice(0,6);
-        document.getElementById("roomInfo").title = "Room: " + pin;
+    showRoomModal("Join Room", pin => {
+        joinRoomSocket(pin);
+        updateRoomLabel(pin);
     });
 }
 
 function quitRoom() {
-    currentRoom = "public";
-    socket.emit("joinRoom", { pin: "public", name: userName });
-    document.getElementById("roomInfo").textContent = "pub";
-    document.getElementById("roomInfo").title = "Room: public";
+    joinRoomSocket("public");
+    updateRoomLabel("pub");
 }
 
 /* ===== Keyboard shortcuts ===== */
-document.addEventListener("keydown", (e) => {
+document.addEventListener("keydown", e => {
     if (e.target.tagName === "INPUT") return;
     if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undoAction(); }
     if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.shiftKey && e.key === "z"))) { e.preventDefault(); redoAction(); }
@@ -454,4 +403,4 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "c") setTool("circle");
     if (e.key === "l") setTool("line");
 });
-    
+        
