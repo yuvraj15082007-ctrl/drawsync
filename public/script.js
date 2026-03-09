@@ -61,53 +61,57 @@ function getPos(clientX, clientY) {
 }
 
 /* ===== Submenu toggle ===== */
-function toggleSubmenu(id) {
+function toggleSubmenu(id, event) {
+    if (event) event.stopPropagation(); // prevent document click from closing immediately
     const menu = document.getElementById(id);
     const isOpen = !menu.classList.contains("hidden");
-    // Close all submenus
     document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
     if (!isOpen) menu.classList.remove("hidden");
 }
 
-// Close submenus when clicking outside
+// Close submenus when clicking outside toolbar
 document.addEventListener("click", e => {
-    if (!e.target.closest(".tb-item") && !e.target.closest(".submenu")) {
+    if (!e.target.closest(".toolbar") && !e.target.closest(".submenu")) {
         document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
     }
 });
 
-function selectBrush(tool, label) {
-    setTool(tool);
+function selectBrush(tool, label, event) {
+    if (event) event.stopPropagation();
+    currentTool = tool;
+    // Update sub-btn active state
     document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("btn-" + tool)?.classList.add("active");
+    // Update group button label and active state
     document.getElementById("label-brush-group").textContent = label;
     document.getElementById("btn-brush-group").classList.add("active");
     document.getElementById("btn-shapes-group")?.classList.remove("active");
-    document.getElementById("submenu-brush-menu")?.classList.add("hidden");
+    document.getElementById("btn-eraser")?.classList.remove("active");
+    // Close submenu
     document.getElementById("brush-menu").classList.add("hidden");
 }
 
-function selectShape(tool, label) {
-    setTool(tool);
+function selectShape(tool, label, event) {
+    if (event) event.stopPropagation();
+    currentTool = tool;
     document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("btn-" + tool)?.classList.add("active");
     document.getElementById("label-shapes-group").textContent = label;
     document.getElementById("btn-shapes-group").classList.add("active");
     document.getElementById("btn-brush-group")?.classList.remove("active");
+    document.getElementById("btn-eraser")?.classList.remove("active");
     document.getElementById("shapes-menu").classList.add("hidden");
 }
 
 /* ===== Tool selection ===== */
 function setTool(tool) {
     currentTool = tool;
-    // Active state handled by selectBrush/selectShape or directly
     if (tool === "eraser") {
         document.querySelectorAll(".tool-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
         document.getElementById("btn-eraser")?.classList.add("active");
-        document.getElementById("btn-brush-group")?.classList.remove("active");
-        document.getElementById("btn-shapes-group")?.classList.remove("active");
+        document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
     }
-    document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
 }
 
 /* ===== Brush styles ===== */
@@ -491,4 +495,4 @@ document.addEventListener("keydown", e => {
     if (e.key === "h") selectBrush("highlighter", "Hi-lite");
     if (e.key === "e") setTool("eraser");
 });
-            
+        
