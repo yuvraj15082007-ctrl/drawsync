@@ -48,14 +48,11 @@ canvas {
     gap: 1px;
     width: var(--tb-w);
     max-height: 96vh;
-    overflow-y: auto;
-    overflow-x: visible;
+    overflow: visible;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    scrollbar-width: none;
 }
-.toolbar::-webkit-scrollbar { display: none; }
 
 .tb-logo {
     font-family: 'Syne', sans-serif;
@@ -355,4 +352,5 @@ canvas {
     .submenu { min-width: 82px; }
     .sub-btn { padding: 6px 8px; font-size: 0.7rem; }
     .size-popup { right: 68px; }
-        }
+    }
+    
