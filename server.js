@@ -53,6 +53,10 @@ io.on("connection", (socket) => {
         socket.to(pin).emit("draw", stroke);
     });
 
+    socket.on("strokeEnd", ({ pin, sid }) => {
+        socket.to(pin).emit("strokeEnd", { uid: socket.id, sid });
+    });
+
     socket.on("clearBoard", (pin) => {
         if (!rooms[pin]) return;
         rooms[pin].strokes = [];
