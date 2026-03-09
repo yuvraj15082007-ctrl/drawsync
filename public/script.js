@@ -62,16 +62,32 @@ function getPos(clientX, clientY) {
 
 /* ===== Submenu toggle ===== */
 function toggleSubmenu(id, event) {
-    if (event) event.stopPropagation(); // prevent document click from closing immediately
+    if (event) event.stopPropagation();
     const menu = document.getElementById(id);
     const isOpen = !menu.classList.contains("hidden");
     document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
-    if (!isOpen) menu.classList.remove("hidden");
+    if (!isOpen) {
+        menu.classList.remove("hidden");
+        // When opening brush menu, restore active state
+        if (id === "brush-menu") {
+            document.getElementById("btn-eraser")?.classList.remove("active");
+            document.getElementById("btn-shapes-group")?.classList.remove("active");
+            document.getElementById("btn-brush-group")?.classList.add("active");
+            // Re-highlight last selected brush in submenu
+            document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
+            document.getElementById("btn-" + lastBrushTool)?.classList.add("active");
+        }
+        if (id === "shapes-menu") {
+            document.getElementById("btn-eraser")?.classList.remove("active");
+            document.getElementById("btn-brush-group")?.classList.remove("active");
+            document.getElementById("btn-shapes-group")?.classList.add("active");
+        }
+    }
 }
 
 // Close submenus when clicking outside toolbar
 document.addEventListener("click", e => {
-    if (!e.target.closest(".toolbar") && !e.target.closest(".submenu")) {
+    if (!e.target.closest(".toolbar")) {
         document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
     }
 });
@@ -79,14 +95,16 @@ document.addEventListener("click", e => {
 function selectBrush(tool, label, event) {
     if (event) event.stopPropagation();
     currentTool = tool;
-    // Update sub-btn active state
+    lastBrushTool = tool;
+    lastBrushLabel = label;
+    // Sub-btn active
     document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("btn-" + tool)?.classList.add("active");
-    // Update group button label and active state
-    document.getElementById("label-brush-group").textContent = label;
+    // Group button active
     document.getElementById("btn-brush-group").classList.add("active");
     document.getElementById("btn-shapes-group")?.classList.remove("active");
     document.getElementById("btn-eraser")?.classList.remove("active");
+    document.getElementById("label-brush-group").textContent = label;
     // Close submenu
     document.getElementById("brush-menu").classList.add("hidden");
 }
@@ -103,13 +121,18 @@ function selectShape(tool, label, event) {
     document.getElementById("shapes-menu").classList.add("hidden");
 }
 
+// Track which brush was last selected so pen button re-activates correctly
+let lastBrushTool = "pen";
+let lastBrushLabel = "Pen";
+
 /* ===== Tool selection ===== */
 function setTool(tool) {
     currentTool = tool;
     if (tool === "eraser") {
-        document.querySelectorAll(".tool-btn").forEach(b => b.classList.remove("active"));
-        document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
+        // Only visually deactivate — don't touch brush-group or shapes-group active state
         document.getElementById("btn-eraser")?.classList.add("active");
+        document.getElementById("btn-brush-group")?.classList.remove("active");
+        document.getElementById("btn-shapes-group")?.classList.remove("active");
         document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
     }
 }
@@ -490,9 +513,4 @@ document.addEventListener("keydown", e => {
     if (e.target.tagName === "INPUT") return;
     if ((e.ctrlKey||e.metaKey) && e.key === "z") { e.preventDefault(); undoAction(); }
     if ((e.ctrlKey||e.metaKey) && (e.key === "y" || (e.shiftKey && e.key === "z"))) { e.preventDefault(); redoAction(); }
-    if (e.key === "b") selectBrush("pen", "Pen");
-    if (e.key === "m") selectBrush("marker", "Marker");
-    if (e.key === "h") selectBrush("highlighter", "Hi-lite");
-    if (e.key === "e") setTool("eraser");
-});
-        
+    if (e
