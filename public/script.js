@@ -29,6 +29,10 @@ let currentStrokeId = 0;
 
 const remoteStrokes = {};
 
+// Track last selected brush for submenu re-highlight
+let lastBrushTool = "pen";
+let lastBrushLabel = "Pen";
+
 /* ===== Canvas ===== */
 function resizeCanvas() {
     canvas.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;touch-action:none;z-index:0;background:#fff;";
@@ -120,10 +124,6 @@ function selectShape(tool, label, event) {
     document.getElementById("btn-eraser")?.classList.remove("active");
     document.getElementById("shapes-menu").classList.add("hidden");
 }
-
-// Track which brush was last selected so pen button re-activates correctly
-let lastBrushTool = "pen";
-let lastBrushLabel = "Pen";
 
 /* ===== Tool selection ===== */
 function setTool(tool) {
@@ -513,4 +513,4 @@ document.addEventListener("keydown", e => {
     if (e.target.tagName === "INPUT") return;
     if ((e.ctrlKey||e.metaKey) && e.key === "z") { e.preventDefault(); undoAction(); }
     if ((e.ctrlKey||e.metaKey) && (e.key === "y" || (e.shiftKey && e.key === "z"))) { e.preventDefault(); redoAction(); }
-    if (e
+    if (e.key === "b") selectBr
