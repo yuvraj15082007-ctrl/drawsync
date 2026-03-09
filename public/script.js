@@ -126,21 +126,36 @@ function drawCircle(x0, y0, x1, y1, c, size) {
 }
 
 /* ===== Render remote stroke ===== */
+// No snapshot restore — just draw segment-by-segment continuously
+// remoteStrokes tracks last drawn point per uid_sid for smooth quadratic curves
 function renderStroke(s) {
     if (s.type === "brush" || !s.type) {
         const key = (s.uid || "r") + "_" + (s.sid || "0");
-        if (!remoteStrokes[key]) {
-            remoteStrokes[key] = {
-                points: [{ x: s.x0, y: s.y0 }],
-                snapshot: ctx.getImageData(0, 0, canvas.width, canvas.height),
-                color: s.color,
-                size: s.size
-            };
+        const prev = remoteStrokes[key]; // last point drawn for this stroke
+
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = s.size;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+
+        if (prev) {
+            // Smooth quadratic curve between prev midpoint and current midpoint
+            ctx.moveTo(prev.lx, prev.ly);
+            const midX = (s.x0 + s.x1) / 2;
+            const midY = (s.y0 + s.y1) / 2;
+            ctx.quadraticCurveTo(s.x0, s.y0, midX, midY);
+        } else {
+            ctx.moveTo(s.x0, s.y0);
+            ctx.lineTo(s.x1, s.y1);
         }
-        remoteStrokes[key].points.push({ x: s.x1, y: s.y1 });
-        const rs = remoteStrokes[key];
-        ctx.putImageData(rs.snapshot, 0, 0);
-        drawFullStroke(rs.points, rs.color, rs.size);
+        ctx.stroke();
+
+        // Store last segment endpoint and midpoint for next curve
+        const midX = (s.x0 + s.x1) / 2;
+        const midY = (s.y0 + s.y1) / 2;
+        remoteStrokes[key] = { lx: (midX + s.x1) / 2, ly: (midY + s.y1) / 2 };
+
     } else if (s.type === "rect") {
         drawRect(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
     } else if (s.type === "circle") {
@@ -403,4 +418,3 @@ document.addEventListener("keydown", e => {
     if (e.key === "c") setTool("circle");
     if (e.key === "l") setTool("line");
 });
-        
