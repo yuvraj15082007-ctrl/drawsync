@@ -63,7 +63,7 @@
 
     <!-- BRUSH GROUP -->
     <div class="tb-item" id="group-brush">
-        <button class="tool-btn active" id="btn-brush-group" onclick="toggleSubmenu('brush-menu')" title="Brushes">
+        <button class="tool-btn active" id="btn-brush-group" onclick="toggleSubmenu('brush-menu', event)" title="Brushes">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
         </button>
         <span class="tb-label" id="label-brush-group">Pen</span>
@@ -71,19 +71,19 @@
 
     <!-- Brush submenu -->
     <div class="submenu hidden" id="brush-menu">
-        <button class="sub-btn active" id="btn-pen" onclick="selectBrush('pen','Pen')" title="Pen">
+        <button class="sub-btn active" id="btn-pen" onclick="selectBrush('pen','Pen', event)" title="Pen">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
             <span>Pen</span>
         </button>
-        <button class="sub-btn" id="btn-marker" onclick="selectBrush('marker','Marker')" title="Marker">
+        <button class="sub-btn" id="btn-marker" onclick="selectBrush('marker','Marker', event)" title="Marker">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="7" height="13" rx="2"/><path d="M8.5 15v5"/><path d="M6.5 20h4"/></svg>
             <span>Marker</span>
         </button>
-        <button class="sub-btn" id="btn-highlighter" onclick="selectBrush('highlighter','Hi-lite')" title="Highlighter">
+        <button class="sub-btn" id="btn-highlighter" onclick="selectBrush('highlighter','Hi-lite', event)" title="Highlighter">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l-6 6v3h3l6-6"/><path d="M22 4l-3-3-9.5 9.5 3 3L22 4z"/></svg>
             <span>Hilite</span>
         </button>
-        <button class="sub-btn" id="btn-calligraphy" onclick="selectBrush('calligraphy','Calli')" title="Calligraphy">
+        <button class="sub-btn" id="btn-calligraphy" onclick="selectBrush('calligraphy','Calli', event)" title="Calligraphy">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21c3-3 4-8 3-12 2 1 5 1 7-1s2-5 1-7c4 4 4 10 0 14"/></svg>
             <span>Calli</span>
         </button>
@@ -101,7 +101,7 @@
 
     <!-- SHAPES GROUP -->
     <div class="tb-item">
-        <button class="tool-btn" id="btn-shapes-group" onclick="toggleSubmenu('shapes-menu')" title="Shapes">
+        <button class="tool-btn" id="btn-shapes-group" onclick="toggleSubmenu('shapes-menu', event)" title="Shapes">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><circle cx="17.5" cy="6.5" r="3.5"/><path d="M12 21l4-7H8l4 7z"/></svg>
         </button>
         <span class="tb-label" id="label-shapes-group">Shapes</span>
@@ -109,27 +109,27 @@
 
     <!-- Shapes submenu -->
     <div class="submenu hidden" id="shapes-menu">
-        <button class="sub-btn" id="btn-rect" onclick="selectShape('rect','Rect')" title="Rectangle">
+        <button class="sub-btn" id="btn-rect" onclick="selectShape('rect','Rect', event)" title="Rectangle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
             <span>Rect</span>
         </button>
-        <button class="sub-btn" id="btn-circle" onclick="selectShape('circle','Circle')" title="Circle">
+        <button class="sub-btn" id="btn-circle" onclick="selectShape('circle','Circle', event)" title="Circle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
             <span>Circle</span>
         </button>
-        <button class="sub-btn" id="btn-line" onclick="selectShape('line','Line')" title="Line">
+        <button class="sub-btn" id="btn-line" onclick="selectShape('line','Line', event)" title="Line">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/></svg>
             <span>Line</span>
         </button>
-        <button class="sub-btn" id="btn-triangle" onclick="selectShape('triangle','Tri')" title="Triangle">
+        <button class="sub-btn" id="btn-triangle" onclick="selectShape('triangle','Tri', event)" title="Triangle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L22 21H2L12 3z"/></svg>
             <span>Triangle</span>
         </button>
-        <button class="sub-btn" id="btn-arrow" onclick="selectShape('arrow','Arrow')" title="Arrow">
+        <button class="sub-btn" id="btn-arrow" onclick="selectShape('arrow','Arrow', event)" title="Arrow">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
             <span>Arrow</span>
         </button>
-        <button class="sub-btn" id="btn-star" onclick="selectShape('star','Star')" title="Star">
+        <button class="sub-btn" id="btn-star" onclick="selectShape('star','Star', event)" title="Star">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             <span>Star</span>
         </button>
@@ -224,3 +224,4 @@
 <script src="script.js"></script>
 </body>
 </html>
+
