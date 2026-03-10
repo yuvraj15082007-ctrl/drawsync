@@ -429,12 +429,20 @@ socket.on("chatMessage", data => {
 });
 
 function replayStroke(s) {
-    const t = s.type;
-    if (t === "brush" || !t) drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
-    else if (["rect","circle","line","triangle","arrow","star","shape-line"].includes(t)) {
-        const type = t === "shape-line" ? "line" : t;
+    const brushTool = s.brushType || "pen";
+    const isShape = ["rect","circle","line","triangle","arrow","star","shape-line"].includes(s.type);
+    if (isShape) {
+        const type = s.type === "shape-line" ? "line" : s.type;
         drawShape(type, s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+        return;
     }
+    // Apply correct brush style
+    applyBrushStyle(brushTool, s.color, s.size);
+    ctx.beginPath();
+    ctx.moveTo(s.x0, s.y0);
+    ctx.lineTo(s.x1, s.y1);
+    ctx.stroke();
+    resetCtx();
 }
 
 /* ===== Clear ===== */
@@ -508,4 +516,4 @@ document.addEventListener("keydown", e => {
     if (e.key === "b") selectBrush("pen", "Pen", null);
     if (e.key === "e") setTool("eraser");
 });
-    
+
