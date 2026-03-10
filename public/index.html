@@ -15,6 +15,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <style>
+        .modal-overlay.hidden { display: none !important; }
+    </style>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-3RPCX4Q246"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -224,21 +227,4 @@
 <script src="script.js"></script>
 </body>
 </html>
-
-<!-- PATCH: Fix name modal hide bug -->
-<script>
-// Override submitName to directly hide modal via style
-function submitName() {
-    var nameVal = document.getElementById("nameInput").value.trim() || "Guest";
-    window.userName = nameVal;
-    var modal = document.getElementById("nameModal");
-    modal.style.display = "none";
-    joinRoomSocket("public");
-}
-document.addEventListener("DOMContentLoaded", function() {
-    document.getElementById("nameInput").addEventListener("keydown", function(e) {
-        if (e.key === "Enter") submitName();
-    });
-});
-</script>
 
