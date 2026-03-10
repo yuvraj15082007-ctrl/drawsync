@@ -288,7 +288,7 @@ canvas {
     display: flex; align-items: center; justify-content: center;
     z-index: 1000; backdrop-filter: blur(10px);
 }
-.modal-overlay.hidden { display: none; }
+.modal-overlay.hidden { display: none !important; }
 
 .modal-box {
     background: #161616;
