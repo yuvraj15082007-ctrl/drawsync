@@ -45,7 +45,7 @@ window.addEventListener("load", () => { document.getElementById("nameInput")?.fo
 
 function submitName() {
     userName = document.getElementById("nameInput").value.trim() || "Guest";
-    document.getElementById("nameModal").classList.add("hidden");
+    document.getElementById("nameModal").style.display = "none"; // FIXED: direct style instead of classList
     joinRoomSocket("public");
 }
 document.getElementById("nameInput")?.addEventListener("keydown", e => { if (e.key === "Enter") submitName(); });
@@ -72,12 +72,10 @@ function toggleSubmenu(id, event) {
     document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
     if (!isOpen) {
         menu.classList.remove("hidden");
-        // When opening brush menu, restore active state
         if (id === "brush-menu") {
             document.getElementById("btn-eraser")?.classList.remove("active");
             document.getElementById("btn-shapes-group")?.classList.remove("active");
             document.getElementById("btn-brush-group")?.classList.add("active");
-            // Re-highlight last selected brush in submenu
             document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
             document.getElementById("btn-" + lastBrushTool)?.classList.add("active");
         }
@@ -89,7 +87,6 @@ function toggleSubmenu(id, event) {
     }
 }
 
-// Close submenus when clicking outside toolbar
 document.addEventListener("click", e => {
     if (!e.target.closest(".toolbar")) {
         document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
@@ -101,15 +98,12 @@ function selectBrush(tool, label, event) {
     currentTool = tool;
     lastBrushTool = tool;
     lastBrushLabel = label;
-    // Sub-btn active
     document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("btn-" + tool)?.classList.add("active");
-    // Group button active
     document.getElementById("btn-brush-group").classList.add("active");
     document.getElementById("btn-shapes-group")?.classList.remove("active");
     document.getElementById("btn-eraser")?.classList.remove("active");
     document.getElementById("label-brush-group").textContent = label;
-    // Close submenu
     document.getElementById("brush-menu").classList.add("hidden");
 }
 
@@ -129,7 +123,6 @@ function selectShape(tool, label, event) {
 function setTool(tool) {
     currentTool = tool;
     if (tool === "eraser") {
-        // Only visually deactivate — don't touch brush-group or shapes-group active state
         document.getElementById("btn-eraser")?.classList.add("active");
         document.getElementById("btn-brush-group")?.classList.remove("active");
         document.getElementById("btn-shapes-group")?.classList.remove("active");
@@ -435,7 +428,6 @@ socket.on("chatMessage", data => {
     setTimeout(() => div.remove(), 30000);
 });
 
-// Replay saved stroke (from server history) — simple line, no smooth needed
 function replayStroke(s) {
     const t = s.type;
     if (t === "brush" || !t) drawLine(s.x0, s.y0, s.x1, s.y1, s.color, s.size);
@@ -513,4 +505,7 @@ document.addEventListener("keydown", e => {
     if (e.target.tagName === "INPUT") return;
     if ((e.ctrlKey||e.metaKey) && e.key === "z") { e.preventDefault(); undoAction(); }
     if ((e.ctrlKey||e.metaKey) && (e.key === "y" || (e.shiftKey && e.key === "z"))) { e.preventDefault(); redoAction(); }
-    if (e.key === "b") selectBr
+    if (e.key === "b") selectBrush("pen", "Pen", null);
+    if (e.key === "e") setTool("eraser");
+});
+    
