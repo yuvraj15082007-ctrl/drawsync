@@ -261,17 +261,19 @@ function renderStroke(s) {
         applyBrushStyle(tool, s.color, s.size);
         ctx.beginPath();
         if (prev) {
+            // Start from prev point to ensure no gap between segments
             ctx.moveTo(prev.x, prev.y);
             if (tool === "calligraphy") {
                 const dx = s.x1-s.x0, dy = s.y1-s.y0;
                 ctx.lineWidth = s.size * (1 + Math.abs(Math.sin(Math.atan2(dy,dx))) * 3);
                 ctx.lineTo(s.x1, s.y1);
             } else {
-                const midX = (s.x0+s.x1)/2, midY = (s.y0+s.y1)/2;
-                ctx.quadraticCurveTo(s.x0, s.y0, midX, midY);
+                ctx.lineTo(s.x0, s.y0);
+                ctx.lineTo(s.x1, s.y1);
             }
         } else {
-            ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1);
+            ctx.moveTo(s.x0, s.y0);
+            ctx.lineTo(s.x1, s.y1);
         }
         ctx.stroke();
         resetCtx();
@@ -516,4 +518,4 @@ document.addEventListener("keydown", e => {
     if (e.key === "b") selectBrush("pen", "Pen", null);
     if (e.key === "e") setTool("eraser");
 });
-
+    
