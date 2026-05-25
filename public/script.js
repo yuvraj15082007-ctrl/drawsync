@@ -3,7 +3,7 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 const BOARD_WIDTH = 1600;
-const BOARD_HEIGHT = 3200;
+const BOARD_HEIGHT = 900;
 canvas.width = BOARD_WIDTH;
 canvas.height = BOARD_HEIGHT;
 
