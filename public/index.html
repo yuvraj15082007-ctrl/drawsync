@@ -64,32 +64,12 @@
     <div class="tb-room" id="roomInfo" title="Room">pub</div>
     <div class="tb-divider"></div>
 
-    <!-- BRUSH GROUP -->
+    <!-- BRUSH GROUP — only Pen now -->
     <div class="tb-item" id="group-brush">
-        <button class="tool-btn active" id="btn-brush-group" onclick="toggleSubmenu('brush-menu', event)" title="Brushes">
+        <button class="tool-btn active" id="btn-brush-group" onclick="selectBrush('pen','Pen', event)" title="Pen">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
         </button>
         <span class="tb-label" id="label-brush-group">Pen</span>
-    </div>
-
-    <!-- Brush submenu -->
-    <div class="submenu hidden" id="brush-menu">
-        <button class="sub-btn active" id="btn-pen" onclick="selectBrush('pen','Pen', event)" title="Pen">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
-            <span>Pen</span>
-        </button>
-        <button class="sub-btn" id="btn-marker" onclick="selectBrush('marker','Marker', event)" title="Marker">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="7" height="13" rx="2"/><path d="M8.5 15v5"/><path d="M6.5 20h4"/></svg>
-            <span>Marker</span>
-        </button>
-        <button class="sub-btn" id="btn-highlighter" onclick="selectBrush('highlighter','Hi-lite', event)" title="Highlighter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l-6 6v3h3l6-6"/><path d="M22 4l-3-3-9.5 9.5 3 3L22 4z"/></svg>
-            <span>Hilite</span>
-        </button>
-        <button class="sub-btn" id="btn-calligraphy" onclick="selectBrush('calligraphy','Calli', event)" title="Calligraphy">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21c3-3 4-8 3-12 2 1 5 1 7-1s2-5 1-7c4 4 4 10 0 14"/></svg>
-            <span>Calli</span>
-        </button>
     </div>
 
     <!-- ERASER -->
@@ -227,4 +207,3 @@
 <script src="script.js"></script>
 </body>
 </html>
-
