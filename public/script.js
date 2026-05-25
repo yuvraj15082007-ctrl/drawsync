@@ -29,10 +29,6 @@ let currentStrokeId = 0;
 
 const remoteStrokes = {};
 
-// Track last selected brush for submenu re-highlight
-let lastBrushTool = "pen";
-let lastBrushLabel = "Pen";
-
 /* ===== Canvas ===== */
 function resizeCanvas() {
     canvas.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;touch-action:none;z-index:0;background:#fff;";
@@ -45,7 +41,7 @@ window.addEventListener("load", () => { document.getElementById("nameInput")?.fo
 
 function submitName() {
     userName = document.getElementById("nameInput").value.trim() || "Guest";
-    document.getElementById("nameModal").style.display = "none"; // FIXED: direct style instead of classList
+    document.getElementById("nameModal").style.display = "none";
     joinRoomSocket("public");
 }
 document.getElementById("nameInput")?.addEventListener("keydown", e => { if (e.key === "Enter") submitName(); });
@@ -72,13 +68,6 @@ function toggleSubmenu(id, event) {
     document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
     if (!isOpen) {
         menu.classList.remove("hidden");
-        if (id === "brush-menu") {
-            document.getElementById("btn-eraser")?.classList.remove("active");
-            document.getElementById("btn-shapes-group")?.classList.remove("active");
-            document.getElementById("btn-brush-group")?.classList.add("active");
-            document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
-            document.getElementById("btn-" + lastBrushTool)?.classList.add("active");
-        }
         if (id === "shapes-menu") {
             document.getElementById("btn-eraser")?.classList.remove("active");
             document.getElementById("btn-brush-group")?.classList.remove("active");
@@ -96,15 +85,9 @@ document.addEventListener("click", e => {
 function selectBrush(tool, label, event) {
     if (event) event.stopPropagation();
     currentTool = tool;
-    lastBrushTool = tool;
-    lastBrushLabel = label;
-    document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
-    document.getElementById("btn-" + tool)?.classList.add("active");
-    document.getElementById("btn-brush-group").classList.add("active");
+    document.getElementById("btn-brush-group")?.classList.add("active");
     document.getElementById("btn-shapes-group")?.classList.remove("active");
     document.getElementById("btn-eraser")?.classList.remove("active");
-    document.getElementById("label-brush-group").textContent = label;
-    document.getElementById("brush-menu").classList.add("hidden");
 }
 
 function selectShape(tool, label, event) {
@@ -137,20 +120,8 @@ function applyBrushStyle(tool, c, size) {
     ctx.lineJoin = "round";
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
-
     if (tool === "pen" || tool === "brush") {
         ctx.lineWidth = size;
-    } else if (tool === "marker") {
-        ctx.lineWidth = size * 3.5;
-        ctx.globalAlpha = 0.82;
-        ctx.lineCap = "square";
-    } else if (tool === "highlighter") {
-        ctx.lineWidth = size * 7;
-        ctx.globalAlpha = 0.28;
-        ctx.lineCap = "square";
-    } else if (tool === "calligraphy") {
-        ctx.lineWidth = size;
-        ctx.lineCap = "butt";
     } else if (tool === "eraser") {
         ctx.lineWidth = size * 4;
     }
@@ -161,17 +132,6 @@ function resetCtx() { ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.lineCap = "ro
 /* ===== Draw helpers ===== */
 function drawFullStroke(pts, tool, c, size) {
     if (pts.length < 2) return;
-
-    if (tool === "calligraphy") {
-        for (let i = 1; i < pts.length; i++) {
-            const dx = pts[i].x - pts[i-1].x, dy = pts[i].y - pts[i-1].y;
-            applyBrushStyle(tool, c, size);
-            ctx.lineWidth = size * (1 + Math.abs(Math.sin(Math.atan2(dy, dx))) * 3);
-            ctx.beginPath(); ctx.moveTo(pts[i-1].x, pts[i-1].y); ctx.lineTo(pts[i].x, pts[i].y); ctx.stroke();
-        }
-        resetCtx(); return;
-    }
-
     applyBrushStyle(tool, c, size);
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -250,7 +210,7 @@ function drawShape(tool, x0, y0, x1, y1, c, size) {
     if (tool === "star")     drawStar(x0, y0, x1, y1, c, size);
 }
 
-/* ===== Remote render ===== */
+/* ===== Remote render (live — segment by segment) ===== */
 function renderStroke(s) {
     const tool = s.brushType || "pen";
     const isShape = ["rect","circle","line","triangle","arrow","star","shape-line"].includes(s.type);
@@ -261,16 +221,12 @@ function renderStroke(s) {
         applyBrushStyle(tool, s.color, s.size);
         ctx.beginPath();
         if (prev) {
-            // Start from prev point to ensure no gap between segments
             ctx.moveTo(prev.x, prev.y);
-            if (tool === "calligraphy") {
-                const dx = s.x1-s.x0, dy = s.y1-s.y0;
-                ctx.lineWidth = s.size * (1 + Math.abs(Math.sin(Math.atan2(dy,dx))) * 3);
-                ctx.lineTo(s.x1, s.y1);
-            } else {
-                ctx.lineTo(s.x0, s.y0);
-                ctx.lineTo(s.x1, s.y1);
-            }
+            // Smooth midpoint curve between prev and current segment
+            const midX = (prev.x + s.x1) / 2;
+            const midY = (prev.y + s.y1) / 2;
+            ctx.quadraticCurveTo(s.x0, s.y0, midX, midY);
+            ctx.lineTo(s.x1, s.y1);
         } else {
             ctx.moveTo(s.x0, s.y0);
             ctx.lineTo(s.x1, s.y1);
@@ -313,7 +269,7 @@ function downloadImage() {
 }
 
 /* ===== Drawing ===== */
-const BRUSH_TOOLS = ["pen", "brush", "marker", "highlighter", "calligraphy", "eraser"];
+const BRUSH_TOOLS = ["pen", "eraser"];
 const SHAPE_TOOLS = ["rect", "circle", "line", "triangle", "arrow", "star"];
 
 function startDraw(clientX, clientY) {
@@ -401,13 +357,13 @@ socket.on("strokeEnd", ({ uid, sid }) => {
 socket.on("undoSync", strokes => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     Object.keys(remoteStrokes).forEach(k => delete remoteStrokes[k]);
-    strokes.forEach(s => replayStroke(s));
+    replayAllStrokes(strokes);
 });
 
 socket.on("loadStrokes", strokes => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     Object.keys(remoteStrokes).forEach(k => delete remoteStrokes[k]);
-    strokes.forEach(s => replayStroke(s));
+    replayAllStrokes(strokes);
 });
 
 socket.on("clearBoard", () => {
@@ -430,21 +386,39 @@ socket.on("chatMessage", data => {
     setTimeout(() => div.remove(), 30000);
 });
 
-function replayStroke(s) {
-    const brushTool = s.brushType || "pen";
-    const isShape = ["rect","circle","line","triangle","arrow","star","shape-line"].includes(s.type);
-    if (isShape) {
-        const type = s.type === "shape-line" ? "line" : s.type;
-        drawShape(type, s.x0, s.y0, s.x1, s.y1, s.color, s.size);
-        return;
+/* ===== Replay — smooth grouped approach ===== */
+function replayAllStrokes(strokes) {
+    // Group brush strokes by uid+sid, keep shapes in order
+    const grouped = []; // array of { type: 'brush'|'shape', data }
+    const strokeMap = {}; // uid_sid -> index in grouped
+
+    for (const s of strokes) {
+        const isShape = ["rect","circle","line","triangle","arrow","star","shape-line"].includes(s.type);
+        if (isShape) {
+            grouped.push({ kind: "shape", s });
+        } else {
+            const key = (s.uid||"r") + "_" + (s.sid||"0");
+            if (!strokeMap[key]) {
+                strokeMap[key] = { kind: "brush", tool: s.brushType||"pen", color: s.color, size: s.size, pts: [] };
+                grouped.push(strokeMap[key]);
+            }
+            // Add x0,y0 on first segment, then x1,y1 for each
+            if (strokeMap[key].pts.length === 0) {
+                strokeMap[key].pts.push({ x: s.x0, y: s.y0 });
+            }
+            strokeMap[key].pts.push({ x: s.x1, y: s.y1 });
+        }
     }
-    // Apply correct brush style
-    applyBrushStyle(brushTool, s.color, s.size);
-    ctx.beginPath();
-    ctx.moveTo(s.x0, s.y0);
-    ctx.lineTo(s.x1, s.y1);
-    ctx.stroke();
-    resetCtx();
+
+    // Now draw each group with smooth quadratic curves
+    for (const item of grouped) {
+        if (item.kind === "shape") {
+            const type = item.s.type === "shape-line" ? "line" : item.s.type;
+            drawShape(type, item.s.x0, item.s.y0, item.s.x1, item.s.y1, item.s.color, item.s.size);
+        } else {
+            drawFullStroke(item.pts, item.tool, item.color, item.size);
+        }
+    }
 }
 
 /* ===== Clear ===== */
@@ -518,4 +492,4 @@ document.addEventListener("keydown", e => {
     if (e.key === "b") selectBrush("pen", "Pen", null);
     if (e.key === "e") setTool("eraser");
 });
-    
+                                  
