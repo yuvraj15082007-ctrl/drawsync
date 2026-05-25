@@ -2,10 +2,14 @@ const socket = io();
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-const BOARD_WIDTH = 1600;
-const BOARD_HEIGHT = 3200;
-canvas.width = BOARD_WIDTH;
-canvas.height = BOARD_HEIGHT;
+// Canvas size = actual screen pixels (hi-DPI support)
+function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    ctx.scale(dpr, dpr);
+    canvas.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;touch-action:none;z-index:0;background:#fff;";
+}
 
 let drawing = false;
 let color = "#000000";
@@ -24,17 +28,19 @@ const MAX_UNDO = 30;
 
 let points = [];
 let lastEmitX = 0, lastEmitY = 0;
-const EMIT_THRESHOLD = 1;
+const EMIT_THRESHOLD = 0.0005; // normalized threshold
 let currentStrokeId = 0;
 
 const remoteStrokes = {};
 
-/* ===== Canvas ===== */
-function resizeCanvas() {
-    canvas.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;touch-action:none;z-index:0;background:#fff;";
-}
+/* ===== Canvas resize ===== */
 resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
+window.addEventListener("resize", () => {
+    // Save current drawing
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    resizeCanvas();
+    ctx.putImageData(imgData, 0, 0);
+});
 
 /* ===== Name Modal ===== */
 window.addEventListener("load", () => { document.getElementById("nameInput")?.focus(); });
@@ -51,12 +57,20 @@ function joinRoomSocket(pin) {
     socket.emit("joinRoom", { pin, name: userName });
 }
 
-/* ===== Position ===== */
+/* ===== Normalized coordinates ===== */
+// Screen pixels → normalized (0 to 1)
 function getPos(clientX, clientY) {
-    const rect = canvas.getBoundingClientRect();
     return {
-        x: (clientX - rect.left) * (canvas.width / rect.width),
-        y: (clientY - rect.top) * (canvas.height / rect.height)
+        x: clientX / window.innerWidth,
+        y: clientY / window.innerHeight
+    };
+}
+
+// Normalized → actual canvas draw pixels
+function toCanvas(nx, ny) {
+    return {
+        x: nx * window.innerWidth,
+        y: ny * window.innerHeight
     };
 }
 
@@ -127,9 +141,14 @@ function applyBrushStyle(tool, c, size) {
     }
 }
 
-function resetCtx() { ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.lineCap = "round"; ctx.lineJoin = "round"; }
+function resetCtx() {
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+}
 
-/* ===== Draw helpers ===== */
+/* ===== Draw helpers (all coords in screen pixels) ===== */
 function drawFullStroke(pts, tool, c, size) {
     if (pts.length < 2) return;
     applyBrushStyle(tool, c, size);
@@ -210,10 +229,14 @@ function drawShape(tool, x0, y0, x1, y1, c, size) {
     if (tool === "star")     drawStar(x0, y0, x1, y1, c, size);
 }
 
-/* ===== Remote render (live — segment by segment) ===== */
+/* ===== Remote render (live) ===== */
 function renderStroke(s) {
     const tool = s.brushType || "pen";
     const isShape = ["rect","circle","line","triangle","arrow","star","shape-line"].includes(s.type);
+
+    // Convert normalized coords to screen pixels
+    const p0 = toCanvas(s.x0, s.y0);
+    const p1 = toCanvas(s.x1, s.y1);
 
     if (!isShape) {
         const key = (s.uid||"r") + "_" + (s.sid||"0");
@@ -222,21 +245,20 @@ function renderStroke(s) {
         ctx.beginPath();
         if (prev) {
             ctx.moveTo(prev.x, prev.y);
-            // Smooth midpoint curve between prev and current segment
-            const midX = (prev.x + s.x1) / 2;
-            const midY = (prev.y + s.y1) / 2;
-            ctx.quadraticCurveTo(s.x0, s.y0, midX, midY);
-            ctx.lineTo(s.x1, s.y1);
+            const midX = (prev.x + p1.x) / 2;
+            const midY = (prev.y + p1.y) / 2;
+            ctx.quadraticCurveTo(p0.x, p0.y, midX, midY);
+            ctx.lineTo(p1.x, p1.y);
         } else {
-            ctx.moveTo(s.x0, s.y0);
-            ctx.lineTo(s.x1, s.y1);
+            ctx.moveTo(p0.x, p0.y);
+            ctx.lineTo(p1.x, p1.y);
         }
         ctx.stroke();
         resetCtx();
-        remoteStrokes[key] = { x: s.x1, y: s.y1 };
+        remoteStrokes[key] = { x: p1.x, y: p1.y };
     } else {
         const type = s.type === "shape-line" ? "line" : s.type;
-        drawShape(type, s.x0, s.y0, s.x1, s.y1, s.color, s.size);
+        drawShape(type, p0.x, p0.y, p1.x, p1.y, s.color, s.size);
     }
 }
 
@@ -274,42 +296,52 @@ const SHAPE_TOOLS = ["rect", "circle", "line", "triangle", "arrow", "star"];
 
 function startDraw(clientX, clientY) {
     drawing = true;
-    const pos = getPos(clientX, clientY);
+    const pos = getPos(clientX, clientY); // normalized
+    const canvasPos = toCanvas(pos.x, pos.y); // pixels for local draw
+
     if (BRUSH_TOOLS.includes(currentTool)) {
         saveSnapshot();
         strokeSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
         currentStrokeId++;
-        points = [pos]; lastEmitX = pos.x; lastEmitY = pos.y;
+        points = [canvasPos];
+        lastEmitX = pos.x; lastEmitY = pos.y;
     } else if (SHAPE_TOOLS.includes(currentTool)) {
         saveSnapshot();
-        shapeStart = pos;
+        shapeStart = pos; // store normalized
         previewSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
     }
 }
 
 function moveDraw(clientX, clientY) {
     if (!drawing) return;
-    const pos = getPos(clientX, clientY);
+    const pos = getPos(clientX, clientY); // normalized
+    const canvasPos = toCanvas(pos.x, pos.y); // pixels
     const drawColor = currentTool === "eraser" ? "#ffffff" : color;
 
     if (BRUSH_TOOLS.includes(currentTool)) {
-        points.push(pos);
+        points.push(canvasPos);
         if (strokeSnapshot) ctx.putImageData(strokeSnapshot, 0, 0);
         drawFullStroke(points, currentTool, drawColor, brushSize);
 
         const dx = pos.x - lastEmitX, dy = pos.y - lastEmitY;
         if (Math.sqrt(dx*dx + dy*dy) >= EMIT_THRESHOLD) {
-            const prev = points[points.length - 2];
+            const prevNorm = {
+                x: points[points.length-2].x / window.innerWidth,
+                y: points[points.length-2].y / window.innerHeight
+            };
+            // Emit normalized coords
             socket.emit("draw", { pin: currentRoom, stroke: {
                 type: "brush", brushType: currentTool,
-                x0: prev.x, y0: prev.y, x1: pos.x, y1: pos.y,
+                x0: prevNorm.x, y0: prevNorm.y,
+                x1: pos.x, y1: pos.y,
                 color: drawColor, size: brushSize, sid: currentStrokeId
             }});
             lastEmitX = pos.x; lastEmitY = pos.y;
         }
     } else if (SHAPE_TOOLS.includes(currentTool) && shapeStart && previewSnapshot) {
         ctx.putImageData(previewSnapshot, 0, 0);
-        drawShape(currentTool, shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+        const s = toCanvas(shapeStart.x, shapeStart.y);
+        drawShape(currentTool, s.x, s.y, canvasPos.x, canvasPos.y, color, brushSize);
     }
 }
 
@@ -317,13 +349,19 @@ function endDraw(clientX, clientY) {
     if (!drawing) return;
     drawing = false;
 
+    const pos = getPos(clientX, clientY); // normalized
+
     if (SHAPE_TOOLS.includes(currentTool) && shapeStart) {
-        const pos = getPos(clientX, clientY);
+        const s = toCanvas(shapeStart.x, shapeStart.y);
+        const e = toCanvas(pos.x, pos.y);
         ctx.putImageData(previewSnapshot, 0, 0);
-        drawShape(currentTool, shapeStart.x, shapeStart.y, pos.x, pos.y, color, brushSize);
+        drawShape(currentTool, s.x, s.y, e.x, e.y, color, brushSize);
+        // Emit normalized
         socket.emit("draw", { pin: currentRoom, stroke: {
-            type: currentTool, x0: shapeStart.x, y0: shapeStart.y,
-            x1: pos.x, y1: pos.y, color, size: brushSize
+            type: currentTool,
+            x0: shapeStart.x, y0: shapeStart.y,
+            x1: pos.x, y1: pos.y,
+            color, size: brushSize
         }});
         shapeStart = null; previewSnapshot = null;
     } else {
@@ -388,9 +426,8 @@ socket.on("chatMessage", data => {
 
 /* ===== Replay — smooth grouped approach ===== */
 function replayAllStrokes(strokes) {
-    // Group brush strokes by uid+sid, keep shapes in order
-    const grouped = []; // array of { type: 'brush'|'shape', data }
-    const strokeMap = {}; // uid_sid -> index in grouped
+    const grouped = [];
+    const strokeMap = {};
 
     for (const s of strokes) {
         const isShape = ["rect","circle","line","triangle","arrow","star","shape-line"].includes(s.type);
@@ -402,19 +439,20 @@ function replayAllStrokes(strokes) {
                 strokeMap[key] = { kind: "brush", tool: s.brushType||"pen", color: s.color, size: s.size, pts: [] };
                 grouped.push(strokeMap[key]);
             }
-            // Add x0,y0 on first segment, then x1,y1 for each
             if (strokeMap[key].pts.length === 0) {
-                strokeMap[key].pts.push({ x: s.x0, y: s.y0 });
+                // First point — convert normalized to pixels
+                strokeMap[key].pts.push(toCanvas(s.x0, s.y0));
             }
-            strokeMap[key].pts.push({ x: s.x1, y: s.y1 });
+            strokeMap[key].pts.push(toCanvas(s.x1, s.y1));
         }
     }
 
-    // Now draw each group with smooth quadratic curves
     for (const item of grouped) {
         if (item.kind === "shape") {
             const type = item.s.type === "shape-line" ? "line" : item.s.type;
-            drawShape(type, item.s.x0, item.s.y0, item.s.x1, item.s.y1, item.s.color, item.s.size);
+            const p0 = toCanvas(item.s.x0, item.s.y0);
+            const p1 = toCanvas(item.s.x1, item.s.y1);
+            drawShape(type, p0.x, p0.y, p1.x, p1.y, item.s.color, item.s.size);
         } else {
             drawFullStroke(item.pts, item.tool, item.color, item.size);
         }
@@ -492,4 +530,4 @@ document.addEventListener("keydown", e => {
     if (e.key === "b") selectBrush("pen", "Pen", null);
     if (e.key === "e") setTool("eraser");
 });
-                                  
+        
