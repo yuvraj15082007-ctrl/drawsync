@@ -12,27 +12,28 @@ const io = new Server(server, {
 app.use(express.static("public"));
 
 let rooms = {
-    public: { users: {}, strokes: [] }
+    public: { users: {}, strokes: [], cursors: {} }
 };
 
 io.on("connection", (socket) => {
 
     socket.on("joinRoom", ({ pin, name }) => {
-        // Leave previous room
         if (socket.room && rooms[socket.room]) {
             socket.leave(socket.room);
             delete rooms[socket.room].users[socket.id];
+            delete rooms[socket.room].cursors[socket.id];
             io.to(socket.room).emit("updateUsers", Object.values(rooms[socket.room].users));
+            io.to(socket.room).emit("removeCursor", { uid: socket.id });
         }
 
-        if (!rooms[pin]) rooms[pin] = { users: {}, strokes: [] };
+        if (!rooms[pin]) rooms[pin] = { users: {}, strokes: [], cursors: {} };
 
         socket.join(pin);
         socket.room = pin;
-        rooms[pin].users[socket.id] = name;
+        rooms[pin].users[socket.id] = { name, color: randomColor() };
 
         socket.emit("loadStrokes", rooms[pin].strokes);
-        io.to(pin).emit("updateUsers", Object.values(rooms[pin].users));
+        io.to(pin).emit("updateUsers", Object.values(rooms[pin].users).map(u => u.name));
     });
 
     socket.on("draw", ({ pin, stroke }) => {
@@ -47,16 +48,26 @@ io.on("connection", (socket) => {
         socket.to(pin).emit("strokeEnd", { uid: socket.id, sid });
     });
 
-    // Undo sync: remove last N strokes from this socket, broadcast updated canvas
+    // Cursor position broadcast
+    socket.on("cursor", ({ pin, x, y }) => {
+        if (!rooms[pin]) return;
+        const user = rooms[pin].users[socket.id];
+        if (!user) return;
+        rooms[pin].cursors[socket.id] = { x, y };
+        socket.to(pin).emit("cursor", {
+            uid: socket.id,
+            name: user.name,
+            color: user.color,
+            x, y
+        });
+    });
+
     socket.on("syncUndo", ({ pin }) => {
         if (!rooms[pin]) return;
         const strokes = rooms[pin].strokes;
-
-        // Remove last stroke(s) belonging to this user
         let removed = 0;
         for (let i = strokes.length - 1; i >= 0 && removed < 1; i--) {
             if (strokes[i].uid === socket.id) {
-                // Remove all segments of this stroke (same sid)
                 const sid = strokes[i].sid;
                 let j = strokes.length - 1;
                 while (j >= 0) {
@@ -68,8 +79,6 @@ io.on("connection", (socket) => {
                 removed++;
             }
         }
-
-        // Tell everyone in room to re-render with new strokes list
         io.to(pin).emit("undoSync", strokes);
     });
 
@@ -83,7 +92,7 @@ io.on("connection", (socket) => {
         if (!rooms[pin]) return;
         if (message.length > 200) return;
         io.to(pin).emit("chatMessage", {
-            name: rooms[pin].users[socket.id],
+            name: rooms[pin].users[socket.id]?.name,
             message
         });
     });
@@ -92,10 +101,17 @@ io.on("connection", (socket) => {
         const room = socket.room;
         if (room && rooms[room]) {
             delete rooms[room].users[socket.id];
-            io.to(room).emit("updateUsers", Object.values(rooms[room].users));
+            delete rooms[room].cursors[socket.id];
+            io.to(room).emit("updateUsers", Object.values(rooms[room].users).map(u => u.name));
+            io.to(room).emit("removeCursor", { uid: socket.id });
         }
     });
 });
+
+function randomColor() {
+    const colors = ["#ff6b6b","#ffd93d","#6bcb77","#4d96ff","#ff922b","#cc5de8","#20c997","#f06595"];
+    return colors[Math.floor(Math.random() * colors.length)];
+}
 
 server.listen(process.env.PORT || 10000, () => {
     console.log("DrawSync running on port", process.env.PORT || 10000);
