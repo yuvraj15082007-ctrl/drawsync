@@ -15,10 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <style>
-        .modal-overlay.hidden { display: none !important; }
-        <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    </style>
+    <style>.modal-overlay.hidden { display: none !important; }</style>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-3RPCX4Q246"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -42,7 +39,13 @@
 <!-- Canvas -->
 <canvas id="canvas"></canvas>
 
-<!-- Floating Chat — top left (transparent) -->
+<!-- Minimap — bottom left -->
+<div class="minimap-wrap" id="minimapWrap">
+    <div class="minimap-label">MAP</div>
+    <canvas id="minimap"></canvas>
+</div>
+
+<!-- Floating Chat — top left -->
 <div class="chatBox" id="chatBox">
     <div class="chat-header" onclick="toggleChat()">
         <span>💬 Chat</span>
@@ -65,7 +68,7 @@
     <div class="tb-room" id="roomInfo" title="Room">pub</div>
     <div class="tb-divider"></div>
 
-    <!-- BRUSH GROUP — only Pen now -->
+    <!-- BRUSH -->
     <div class="tb-item" id="group-brush">
         <button class="tool-btn active" id="btn-brush-group" onclick="selectBrush('pen','Pen', event)" title="Pen">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
@@ -83,7 +86,7 @@
 
     <div class="tb-divider"></div>
 
-    <!-- SHAPES GROUP -->
+    <!-- SHAPES -->
     <div class="tb-item">
         <button class="tool-btn" id="btn-shapes-group" onclick="toggleSubmenu('shapes-menu', event)" title="Shapes">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><circle cx="17.5" cy="6.5" r="3.5"/><path d="M12 21l4-7H8l4 7z"/></svg>
@@ -93,29 +96,23 @@
 
     <!-- Shapes submenu -->
     <div class="submenu hidden" id="shapes-menu">
-        <button class="sub-btn" id="btn-rect" onclick="selectShape('rect','Rect', event)" title="Rectangle">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
-            <span>Rect</span>
+        <button class="sub-btn" id="btn-rect" onclick="selectShape('rect','Rect', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/></svg><span>Rect</span>
         </button>
-        <button class="sub-btn" id="btn-circle" onclick="selectShape('circle','Circle', event)" title="Circle">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
-            <span>Circle</span>
+        <button class="sub-btn" id="btn-circle" onclick="selectShape('circle','Circle', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg><span>Circle</span>
         </button>
-        <button class="sub-btn" id="btn-line" onclick="selectShape('line','Line', event)" title="Line">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/></svg>
-            <span>Line</span>
+        <button class="sub-btn" id="btn-line" onclick="selectShape('line','Line', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/></svg><span>Line</span>
         </button>
-        <button class="sub-btn" id="btn-triangle" onclick="selectShape('triangle','Tri', event)" title="Triangle">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L22 21H2L12 3z"/></svg>
-            <span>Triangle</span>
+        <button class="sub-btn" id="btn-triangle" onclick="selectShape('triangle','Tri', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L22 21H2L12 3z"/></svg><span>Triangle</span>
         </button>
-        <button class="sub-btn" id="btn-arrow" onclick="selectShape('arrow','Arrow', event)" title="Arrow">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
-            <span>Arrow</span>
+        <button class="sub-btn" id="btn-arrow" onclick="selectShape('arrow','Arrow', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg><span>Arrow</span>
         </button>
-        <button class="sub-btn" id="btn-star" onclick="selectShape('star','Star', event)" title="Star">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            <span>Star</span>
+        <button class="sub-btn" id="btn-star" onclick="selectShape('star','Star', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span>Star</span>
         </button>
     </div>
 
@@ -139,14 +136,14 @@
 
     <!-- Undo / Redo -->
     <div class="tb-item">
-        <button class="tool-btn" onclick="undoAction()" title="Undo">
+        <button class="tool-btn" onclick="undoAction()" title="Undo (Ctrl+Z)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
         </button>
         <span class="tb-label">Undo</span>
     </div>
 
     <div class="tb-item">
-        <button class="tool-btn" onclick="redoAction()" title="Redo">
+        <button class="tool-btn" onclick="redoAction()" title="Redo (Ctrl+Y)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
         </button>
         <span class="tb-label">Redo</span>
@@ -154,9 +151,9 @@
 
     <div class="tb-divider"></div>
 
-    <!-- Download -->
+    <!-- Save -->
     <div class="tb-item">
-        <button class="tool-btn" onclick="downloadImage()" title="Download">
+        <button class="tool-btn" onclick="downloadImage()" title="Save">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
         <span class="tb-label">Save</span>
@@ -202,6 +199,13 @@
     <div class="size-popup-label">Size: <span id="sizePopupVal">3</span>px</div>
     <input type="range" id="brushSize" min="1" max="50" value="3">
     <button onclick="closeSizePopup()">Done</button>
+</div>
+
+<!-- Zoom controls — bottom right -->
+<div class="zoom-controls">
+    <button onclick="zoomAt(window.innerWidth/2, window.innerHeight/2, 1.25)" title="Zoom In">+</button>
+    <button onclick="zoomAt(window.innerWidth/2, window.innerHeight/2, 0.8)" title="Zoom Out">−</button>
+    <button onclick="resetView()" title="Reset View">⊙</button>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
