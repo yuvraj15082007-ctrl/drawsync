@@ -268,12 +268,40 @@ function updateMinimap() {
     mmCtx.fillStyle = "#1a1a1a";
     mmCtx.fillRect(0, 0, mw, mh);
 
-    // Scale: world 0..WORLD_SIZE -> minimap 0..mw / 0..mh
-    const scaleX = mw / WORLD_SIZE;
-    const scaleY = mh / WORLD_SIZE;
+    // Find bounding box of all content + current viewport
+    let minX = vpX, minY = vpY;
+    let maxX = vpX + canvas.width / zoom;
+    let maxY = vpY + canvas.height / zoom;
 
-    function wx(x) { return x * scaleX; }
-    function wy(y) { return y * scaleY; }
+    for (const s of allStrokes) {
+        minX = Math.min(minX, s.x0, s.x1);
+        minY = Math.min(minY, s.y0, s.y1);
+        maxX = Math.max(maxX, s.x0, s.x1);
+        maxY = Math.max(maxY, s.y0, s.y1);
+    }
+
+    // Add padding
+    const pad = Math.max((maxX - minX), (maxY - minY)) * 0.1;
+    minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+
+    const rangeX = maxX - minX || 1;
+    const rangeY = maxY - minY || 1;
+
+    // Keep aspect ratio
+    const aspect = rangeX / rangeY;
+    let scaleX, scaleY, offX = 0, offY = 0;
+    if (aspect > mw / mh) {
+        scaleX = mw / rangeX;
+        scaleY = scaleX;
+        offY = (mh - rangeY * scaleY) / 2;
+    } else {
+        scaleY = mh / rangeY;
+        scaleX = scaleY;
+        offX = (mw - rangeX * scaleX) / 2;
+    }
+
+    function wx(x) { return (x - minX) * scaleX + offX; }
+    function wy(y) { return (y - minY) * scaleY + offY; }
 
     // Draw strokes
     const strokeMap = {};
@@ -284,7 +312,7 @@ function updateMinimap() {
             mmCtx.lineWidth = 0.8;
             mmCtx.beginPath();
             if (s.type === "rect") {
-                mmCtx.strokeRect(wx(s.x0), wy(s.y0), wx(s.x1 - s.x0), wy(s.y1 - s.y0));
+                mmCtx.strokeRect(wx(s.x0), wy(s.y0), (s.x1-s.x0)*scaleX, (s.y1-s.y0)*scaleY);
             } else {
                 mmCtx.moveTo(wx(s.x0), wy(s.y0));
                 mmCtx.lineTo(wx(s.x1), wy(s.y1));
@@ -310,14 +338,14 @@ function updateMinimap() {
         mmCtx.stroke();
     }
 
-    // Viewport rect (yellow box showing current view)
-    const vx = wx(vpX);
-    const vy = wy(vpY);
-    const vw = wx(canvas.width / zoom);
-    const vh = wy(canvas.height / zoom);
+    // Viewport rect
     mmCtx.strokeStyle = "#e8ff47";
     mmCtx.lineWidth = 1.5;
-    mmCtx.strokeRect(vx, vy, vw, vh);
+    mmCtx.strokeRect(
+        wx(vpX), wy(vpY),
+        (canvas.width / zoom) * scaleX,
+        (canvas.height / zoom) * scaleY
+    );
 
     // Remote cursors
     for (const uid in remoteCursors) {
@@ -327,15 +355,23 @@ function updateMinimap() {
         mmCtx.fillStyle = c.color;
         mmCtx.fill();
     }
+
+    // Store for click-to-jump
+    mm._minX = minX; mm._minY = minY;
+    mm._scaleX = scaleX; mm._scaleY = scaleY;
+    mm._offX = offX; mm._offY = offY;
 }
 
 // Click minimap to jump
 minimap.addEventListener("click", e => {
+    if (!minimap._scaleX) return;
     const rect = minimap.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) / minimap.width;
-    const my = (e.clientY - rect.top) / minimap.height;
-    vpX = mx * WORLD_SIZE - (canvas.width / zoom) / 2;
-    vpY = my * WORLD_SIZE - (canvas.height / zoom) / 2;
+    const px = (e.clientX - rect.left) * (minimap.width / rect.width);
+    const py = (e.clientY - rect.top) * (minimap.height / rect.height);
+    const wx = (px - minimap._offX) / minimap._scaleX + minimap._minX;
+    const wy = (py - minimap._offY) / minimap._scaleY + minimap._minY;
+    vpX = wx - (canvas.width / zoom) / 2;
+    vpY = wy - (canvas.height / zoom) / 2;
     redrawAll();
     updateMinimap();
 });
