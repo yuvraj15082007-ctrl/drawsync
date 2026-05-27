@@ -52,6 +52,7 @@ const MAX_UNDO = 30;
 let points = []; // world coords
 let currentStrokeId = 0;
 let allStrokes = []; // full stroke store for redraw
+let activeLocalStrokes = {}; // uid_sid -> pts, for incremental local drawing
 
 const remoteCursors = {}; // uid → { name, color, x, y (world) }
 let cursorThrottle = 0;
@@ -393,6 +394,14 @@ function startDraw(clientX, clientY) {
         saveSnapshot();
         currentStrokeId++;
         points = [wp];
+        // Track this stroke locally for smooth drawing
+        const key = "local_" + currentStrokeId;
+        activeLocalStrokes[key] = {
+            tool: currentTool,
+            color: currentTool === "eraser" ? "#ffffff" : color,
+            size: brushSize,
+            pts: [wp]
+        };
     } else if (SHAPE_TOOLS.includes(currentTool)) {
         saveSnapshot();
         shapeStart = wp;
@@ -417,7 +426,13 @@ function moveDraw(clientX, clientY) {
         const prev = points[points.length - 1];
         points.push(wp);
 
-        // Draw just the new segment on top
+        // Update local active stroke points
+        const key = "local_" + currentStrokeId;
+        if (activeLocalStrokes[key]) {
+            activeLocalStrokes[key].pts.push(wp);
+        }
+
+        // Draw just the new segment incrementally — no canvas wipe
         drawFullStrokeWorld([prev, wp], currentTool, drawColor, brushSize);
 
         // Emit
@@ -428,7 +443,7 @@ function moveDraw(clientX, clientY) {
         }});
 
     } else if (SHAPE_TOOLS.includes(currentTool) && shapeStart) {
-        // Restore + redraw shape preview
+        // Shape preview — redraw all + shape on top
         allStrokes = [...previewStrokeSnapshot];
         redrawAll();
         drawShapeWorld(currentTool, shapeStart.x, shapeStart.y, wp.x, wp.y, color, brushSize);
@@ -470,6 +485,8 @@ function endDraw(clientX, clientY) {
                 });
             }
         }
+        // Cleanup active local stroke
+        delete activeLocalStrokes["local_" + currentStrokeId];
         socket.emit("strokeEnd", { pin: currentRoom, sid: currentStrokeId });
     }
     points = [];
@@ -478,6 +495,7 @@ function endDraw(clientX, clientY) {
 
 function cancelDraw() {
     if (drawing) socket.emit("strokeEnd", { pin: currentRoom, sid: currentStrokeId });
+    delete activeLocalStrokes["local_" + currentStrokeId];
     drawing = false; points = [];
 }
 
@@ -537,9 +555,12 @@ canvas.addEventListener("mouseleave", () => { if (!isPanning) cancelDraw(); });
 // ===== TOUCH EVENTS =====
 canvas.addEventListener("touchstart", e => {
     e.preventDefault();
+
     if (e.touches.length === 2) {
+        // Two fingers — cancel any drawing, start pinch/pan
+        if (drawing) cancelDraw();
         isPinching = true;
-        drawing = false;
+
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         lastPinchDist = Math.sqrt(dx*dx + dy*dy);
@@ -547,18 +568,25 @@ canvas.addEventListener("touchstart", e => {
             x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
             y: (e.touches[0].clientY + e.touches[1].clientY) / 2
         };
-        // Also setup pan
         panStart = { ...lastPinchMid };
         vpStart = { x: vpX, y: vpY };
         return;
     }
-    isPinching = false;
-    startDraw(e.touches[0].clientX, e.touches[0].clientY);
+
+    // Only start drawing if single touch and not pinching
+    if (e.touches.length === 1 && !isPinching) {
+        startDraw(e.touches[0].clientX, e.touches[0].clientY);
+    }
 }, { passive: false });
 
 canvas.addEventListener("touchmove", e => {
     e.preventDefault();
+
     if (e.touches.length === 2) {
+        // Cancel drawing if second finger joins mid-stroke
+        if (drawing) cancelDraw();
+        isPinching = true;
+
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.sqrt(dx*dx + dy*dy);
@@ -568,8 +596,10 @@ canvas.addEventListener("touchmove", e => {
         };
 
         // Zoom
-        const factor = dist / lastPinchDist;
-        zoomAt(mid.x, mid.y, factor);
+        if (lastPinchDist > 0) {
+            const factor = dist / lastPinchDist;
+            zoomAt(mid.x, mid.y, factor);
+        }
         lastPinchDist = dist;
 
         // Pan
@@ -581,29 +611,75 @@ canvas.addEventListener("touchmove", e => {
         updateMinimap();
         return;
     }
-    if (isPinching) return;
-    moveDraw(e.touches[0].clientX, e.touches[0].clientY);
+
+    // Single touch drawing — only if not pinching
+    if (e.touches.length === 1 && !isPinching) {
+        moveDraw(e.touches[0].clientX, e.touches[0].clientY);
+    }
 }, { passive: false });
 
 canvas.addEventListener("touchend", e => {
-    if (isPinching && e.touches.length < 2) { isPinching = false; return; }
-    if (e.changedTouches.length) endDraw(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+    e.preventDefault();
+
+    if (e.touches.length === 0) {
+        // All fingers lifted
+        if (isPinching) {
+            isPinching = false;
+            lastPinchDist = 0;
+            return;
+        }
+        if (drawing && e.changedTouches.length) {
+            endDraw(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+        }
+        return;
+    }
+
+    if (e.touches.length === 1 && isPinching) {
+        // One finger lifted from pinch — stop pinching, don't draw
+        isPinching = false;
+        lastPinchDist = 0;
+        return;
+    }
+}, { passive: false });
+
+canvas.addEventListener("touchcancel", e => {
+    isPinching = false;
+    lastPinchDist = 0;
+    cancelDraw();
 });
-canvas.addEventListener("touchcancel", () => cancelDraw());
 
 // ===== SOCKET EVENTS =====
 socket.on("draw", stroke => {
     allStrokes.push(stroke);
-    // Draw incrementally
+
     const isShape = ["rect","circle","line","triangle","arrow","star"].includes(stroke.type);
     if (isShape) {
-        drawShapeWorld(stroke.type, stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
+        // Shapes: redraw all (shape preview needs clean canvas)
+        redrawAll();
     } else {
-        drawFullStrokeWorld(
-            [{ x: stroke.x0, y: stroke.y0 }, { x: stroke.x1, y: stroke.y1 }],
-            stroke.brushType||"pen", stroke.color, stroke.size
-        );
+        // Brush: draw incrementally using smooth curve with prev point
+        const key = (stroke.uid||"r") + "_" + (stroke.sid||"0");
+        if (!activeLocalStrokes[key]) {
+            activeLocalStrokes[key] = { pts: [{ x: stroke.x0, y: stroke.y0 }] };
+        }
+        activeLocalStrokes[key].pts.push({ x: stroke.x1, y: stroke.y1 });
+
+        // Draw smooth segment
+        const pts = activeLocalStrokes[key].pts;
+        const len = pts.length;
+        if (len >= 2) {
+            drawFullStrokeWorld(
+                pts.slice(Math.max(0, len-3)),
+                stroke.brushType||"pen", stroke.color, stroke.size
+            );
+        }
     }
+    updateMinimap();
+});
+
+socket.on("strokeEnd", ({ uid, sid }) => {
+    const key = (uid||"r") + "_" + (sid||"0");
+    delete activeLocalStrokes[key];
     updateMinimap();
 });
 
@@ -689,7 +765,7 @@ function redoAction() {
 function downloadImage() {
     if (allStrokes.length === 0) { alert("Nothing to save!"); return; }
 
-    // Find bounding box
+    // Find bounding box of all strokes
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const s of allStrokes) {
         minX = Math.min(minX, s.x0, s.x1);
@@ -700,6 +776,7 @@ function downloadImage() {
     const pad = 40;
     minX -= pad; minY -= pad; maxX += pad; maxY += pad;
 
+    // Render to offscreen canvas at 1:1 zoom
     const w = maxX - minX, h = maxY - minY;
     const offscreen = document.createElement("canvas");
     offscreen.width = w; offscreen.height = h;
@@ -707,13 +784,20 @@ function downloadImage() {
     octx.fillStyle = "#ffffff";
     octx.fillRect(0, 0, w, h);
 
-    // Draw strokes to offscreen
+    // Temporarily swap ctx, vpX/Y, zoom to render clean
+    const savedCtx = ctx;
+    const savedVpX = vpX, savedVpY = vpY, savedZoom = zoom;
+
+    // Override worldToScreen for offscreen
+    const renderStrokes = allStrokes.filter(s => s.color !== "#ffffff"); // skip eraser for export
+    vpX = minX; vpY = minY; zoom = 1;
+
+    // Draw to offscreen
     const strokeMap = {};
-    for (const s of allStrokes) {
-        if (s.color === "#ffffff") continue;
+    for (const s of renderStrokes) {
         const isShape = ["rect","circle","line","triangle","arrow","star"].includes(s.type);
-        const p0 = { x: s.x0 - minX, y: s.y0 - minY };
-        const p1 = { x: s.x1 - minX, y: s.y1 - minY };
+        const p0 = { x: (s.x0 - minX), y: (s.y0 - minY) };
+        const p1 = { x: (s.x1 - minX), y: (s.y1 - minY) };
         if (isShape) {
             octx.strokeStyle = s.color; octx.lineWidth = s.size;
             octx.lineCap = "round"; octx.lineJoin = "round";
@@ -722,27 +806,6 @@ function downloadImage() {
             else if (s.type === "circle") {
                 const cx=(p0.x+p1.x)/2, cy=(p0.y+p1.y)/2;
                 octx.beginPath(); octx.ellipse(cx,cy,Math.abs(p1.x-p0.x)/2,Math.abs(p1.y-p0.y)/2,0,0,Math.PI*2); octx.stroke();
-            }
-            else if (s.type === "triangle") {
-                const mx=(p0.x+p1.x)/2;
-                octx.beginPath(); octx.moveTo(mx,p0.y); octx.lineTo(p1.x,p1.y); octx.lineTo(p0.x,p1.y); octx.closePath(); octx.stroke();
-            }
-            else if (s.type === "arrow") {
-                const angle = Math.atan2(p1.y-p0.y,p1.x-p0.x);
-                const hl = Math.max(16, s.size*4);
-                octx.beginPath(); octx.moveTo(p0.x,p0.y); octx.lineTo(p1.x,p1.y); octx.stroke();
-                octx.beginPath();
-                octx.moveTo(p1.x,p1.y); octx.lineTo(p1.x-hl*Math.cos(angle-Math.PI/6),p1.y-hl*Math.sin(angle-Math.PI/6));
-                octx.moveTo(p1.x,p1.y); octx.lineTo(p1.x-hl*Math.cos(angle+Math.PI/6),p1.y-hl*Math.sin(angle+Math.PI/6));
-                octx.stroke();
-            }
-            else if (s.type === "star") {
-                const cx=(p0.x+p1.x)/2, cy=(p0.y+p1.y)/2;
-                const outerR=Math.min(Math.abs(p1.x-p0.x),Math.abs(p1.y-p0.y))/2;
-                const innerR=outerR*0.4;
-                octx.beginPath();
-                for(let i=0;i<10;i++){const a=(i*Math.PI)/5-Math.PI/2;const r=i%2===0?outerR:innerR;i===0?octx.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a)):octx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));}
-                octx.closePath(); octx.stroke();
             }
         } else {
             const key = (s.uid||"l")+"_"+(s.sid||"0");
@@ -757,46 +820,23 @@ function downloadImage() {
         octx.strokeStyle = s.color; octx.lineWidth = s.size;
         octx.lineCap = "round"; octx.lineJoin = "round";
         octx.beginPath(); octx.moveTo(s.pts[0].x, s.pts[0].y);
-        for (let i = 1; i < s.pts.length-1; i++) {
-            const mx=(s.pts[i].x+s.pts[i+1].x)/2, my=(s.pts[i].y+s.pts[i+1].y)/2;
-            octx.quadraticCurveTo(s.pts[i].x,s.pts[i].y,mx,my);
+        for (let i = 1; i < s.pts.length - 1; i++) {
+            const mx = (s.pts[i].x+s.pts[i+1].x)/2, my = (s.pts[i].y+s.pts[i+1].y)/2;
+            octx.quadraticCurveTo(s.pts[i].x, s.pts[i].y, mx, my);
         }
-        octx.lineTo(s.pts[s.pts.length-1].x,s.pts[s.pts.length-1].y);
+        octx.lineTo(s.pts[s.pts.length-1].x, s.pts[s.pts.length-1].y);
         octx.stroke();
     }
 
-    const dataUrl = offscreen.toDataURL("image/png");
-    const fileName = "drawsync-" + Date.now() + ".png";
+    // Restore
+    vpX = savedVpX; vpY = savedVpY; zoom = savedZoom;
 
-    // Android WebView — use Web Share API
-    if (navigator.share && navigator.canShare) {
-        offscreen.toBlob(blob => {
-            const file = new File([blob], fileName, { type: "image/png" });
-            if (navigator.canShare({ files: [file] })) {
-                navigator.share({ files: [file], title: "DrawSync" })
-                    .catch(err => console.log("Share cancelled", err));
-            } else {
-                // Fallback — direct download
-                const link = document.createElement("a");
-                link.download = fileName;
-                link.href = dataUrl;
-                link.click();
-            }
-        });
-    } else {
-        // Desktop browser
-        const link = document.createElement("a");
-        link.download = fileName;
-        link.href = dataUrl;
-        link.click();
-    }
+    const link = document.createElement("a");
+    link.download = "drawsync-" + Date.now() + ".png";
+    link.href = offscreen.toDataURL("image/png");
+    link.click();
+}
 
-// Android WebView bridge
-if (window.AndroidSave) {
-    window.AndroidSave.saveImage(dataUrl);
-    return;
-}
-}
 // ===== TOOLBAR =====
 function toggleSubmenu(id, event) {
     if (event) event.stopPropagation();
