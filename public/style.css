@@ -123,32 +123,7 @@ canvas#canvas {
     padding: 0 4px 2px;
 }
 
-/* ===== MINIMAP inside toolbar ===== */
-.tb-minimap-wrap {
-    width: 54px;
-    background: rgba(0,0,0,0.4);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
-    padding: 4px;
-    margin: 2px 0;
-    cursor: crosshair;
-}
 
-.minimap-label {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.4rem;
-    color: rgba(255,255,255,0.25);
-    letter-spacing: 1px;
-    text-align: center;
-    margin-bottom: 2px;
-}
-
-#minimap {
-    display: block;
-    width: 46px !important;
-    height: 46px !important;
-    border-radius: 4px;
-}
 
 .tb-divider {
     width: 34px; height: 1px;
@@ -195,27 +170,7 @@ canvas#canvas {
 .tool-btn.danger { color: var(--danger); }
 .tool-btn.danger:hover { background: rgba(255,71,71,0.15); border-color: var(--danger); }
 
-/* ===== ZOOM ROW inside toolbar ===== */
-.tb-zoom-row {
-    display: flex;
-    flex-direction: row;
-    gap: 2px;
-    padding: 2px 4px;
-}
-.tb-zoom-row button {
-    width: 16px; height: 22px;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    color: var(--text-dim);
-    font-size: 0.75rem;
-    font-weight: 700;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-    padding: 0;
-}
-.tb-zoom-row button:hover { color: var(--accent); border-color: var(--accent); }
+
 
 /* ===== SUBMENU ===== */
 .submenu {
@@ -433,6 +388,101 @@ canvas#canvas {
 .btn-confirm { background: var(--accent); color: #000; }
 .btn-cancel { background: #1f1f1f; color: #f0f0f0; border: 1px solid rgba(255,255,255,0.1) !important; }
 
+/* ===== MINIMAP floating ===== */
+.minimap-wrap {
+    position: fixed;
+    bottom: 80px;
+    right: 78px;
+    z-index: 100;
+    background: rgba(16,16,16,0.90);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    overflow: hidden;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    transition: all 0.25s cubic-bezier(0.34,1.2,0.64,1);
+}
+
+.minimap-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    cursor: pointer;
+    user-select: none;
+}
+.minimap-header:hover { background: rgba(255,255,255,0.04); }
+
+.minimap-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.42rem;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 1px;
+}
+
+.minimap-toggle-icon {
+    font-size: 0.65rem;
+    color: rgba(255,255,255,0.3);
+    transition: transform 0.2s;
+}
+
+#minimap {
+    display: block;
+    border-radius: 0 0 10px 10px;
+    cursor: crosshair;
+    transition: all 0.25s;
+}
+
+/* Collapsed state */
+.minimap-wrap.collapsed #minimap {
+    display: none;
+}
+.minimap-wrap.collapsed .minimap-toggle-icon {
+    transform: rotate(180deg);
+}
+
+/* Expanded (big) state */
+.minimap-wrap.expanded #minimap {
+    width: 220px !important;
+    height: 160px !important;
+}
+
+/* Normal state */
+.minimap-wrap:not(.expanded):not(.collapsed) #minimap {
+    width: 120px !important;
+    height: 90px !important;
+}
+
+/* ===== ZOOM CONTROLS floating ===== */
+.zoom-controls {
+    position: fixed;
+    bottom: 16px;
+    right: 78px;
+    z-index: 100;
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+}
+.zoom-controls button {
+    width: 32px; height: 32px;
+    background: rgba(16,16,16,0.88);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: #f0f0f0;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(10px);
+    transition: all 0.15s;
+}
+.zoom-controls button:hover {
+    background: rgba(232,255,71,0.15);
+    border-color: rgba(232,255,71,0.4);
+    color: #e8ff47;
+}
+
 /* ===== MOBILE ===== */
 @media (max-width: 480px) {
     :root { --tb-w: 56px; }
@@ -443,6 +493,8 @@ canvas#canvas {
     .sub-btn { padding: 6px 8px; font-size: 0.7rem; }
     .size-popup { right: 68px; }
     .tb-show-btn { right: 5px; }
-    #minimap { width: 40px !important; height: 40px !important; }
-    .tb-minimap-wrap { width: 48px; }
+    .minimap-wrap { right: 68px; bottom: 70px; }
+    .zoom-controls { right: 68px; bottom: 12px; }
+    .minimap-wrap:not(.expanded):not(.collapsed) #minimap { width: 100px !important; height: 75px !important; }
+    .minimap-wrap.expanded #minimap { width: 180px !important; height: 130px !important; }
 }
