@@ -689,7 +689,7 @@ function redoAction() {
 function downloadImage() {
     if (allStrokes.length === 0) { alert("Nothing to save!"); return; }
 
-    // Find bounding box of all strokes
+    // Find bounding box
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const s of allStrokes) {
         minX = Math.min(minX, s.x0, s.x1);
@@ -700,7 +700,6 @@ function downloadImage() {
     const pad = 40;
     minX -= pad; minY -= pad; maxX += pad; maxY += pad;
 
-    // Render to offscreen canvas at 1:1 zoom
     const w = maxX - minX, h = maxY - minY;
     const offscreen = document.createElement("canvas");
     offscreen.width = w; offscreen.height = h;
@@ -708,20 +707,13 @@ function downloadImage() {
     octx.fillStyle = "#ffffff";
     octx.fillRect(0, 0, w, h);
 
-    // Temporarily swap ctx, vpX/Y, zoom to render clean
-    const savedCtx = ctx;
-    const savedVpX = vpX, savedVpY = vpY, savedZoom = zoom;
-
-    // Override worldToScreen for offscreen
-    const renderStrokes = allStrokes.filter(s => s.color !== "#ffffff"); // skip eraser for export
-    vpX = minX; vpY = minY; zoom = 1;
-
-    // Draw to offscreen
+    // Draw strokes to offscreen
     const strokeMap = {};
-    for (const s of renderStrokes) {
+    for (const s of allStrokes) {
+        if (s.color === "#ffffff") continue;
         const isShape = ["rect","circle","line","triangle","arrow","star"].includes(s.type);
-        const p0 = { x: (s.x0 - minX), y: (s.y0 - minY) };
-        const p1 = { x: (s.x1 - minX), y: (s.y1 - minY) };
+        const p0 = { x: s.x0 - minX, y: s.y0 - minY };
+        const p1 = { x: s.x1 - minX, y: s.y1 - minY };
         if (isShape) {
             octx.strokeStyle = s.color; octx.lineWidth = s.size;
             octx.lineCap = "round"; octx.lineJoin = "round";
@@ -730,6 +722,27 @@ function downloadImage() {
             else if (s.type === "circle") {
                 const cx=(p0.x+p1.x)/2, cy=(p0.y+p1.y)/2;
                 octx.beginPath(); octx.ellipse(cx,cy,Math.abs(p1.x-p0.x)/2,Math.abs(p1.y-p0.y)/2,0,0,Math.PI*2); octx.stroke();
+            }
+            else if (s.type === "triangle") {
+                const mx=(p0.x+p1.x)/2;
+                octx.beginPath(); octx.moveTo(mx,p0.y); octx.lineTo(p1.x,p1.y); octx.lineTo(p0.x,p1.y); octx.closePath(); octx.stroke();
+            }
+            else if (s.type === "arrow") {
+                const angle = Math.atan2(p1.y-p0.y,p1.x-p0.x);
+                const hl = Math.max(16, s.size*4);
+                octx.beginPath(); octx.moveTo(p0.x,p0.y); octx.lineTo(p1.x,p1.y); octx.stroke();
+                octx.beginPath();
+                octx.moveTo(p1.x,p1.y); octx.lineTo(p1.x-hl*Math.cos(angle-Math.PI/6),p1.y-hl*Math.sin(angle-Math.PI/6));
+                octx.moveTo(p1.x,p1.y); octx.lineTo(p1.x-hl*Math.cos(angle+Math.PI/6),p1.y-hl*Math.sin(angle+Math.PI/6));
+                octx.stroke();
+            }
+            else if (s.type === "star") {
+                const cx=(p0.x+p1.x)/2, cy=(p0.y+p1.y)/2;
+                const outerR=Math.min(Math.abs(p1.x-p0.x),Math.abs(p1.y-p0.y))/2;
+                const innerR=outerR*0.4;
+                octx.beginPath();
+                for(let i=0;i<10;i++){const a=(i*Math.PI)/5-Math.PI/2;const r=i%2===0?outerR:innerR;i===0?octx.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a)):octx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));}
+                octx.closePath(); octx.stroke();
             }
         } else {
             const key = (s.uid||"l")+"_"+(s.sid||"0");
@@ -744,21 +757,39 @@ function downloadImage() {
         octx.strokeStyle = s.color; octx.lineWidth = s.size;
         octx.lineCap = "round"; octx.lineJoin = "round";
         octx.beginPath(); octx.moveTo(s.pts[0].x, s.pts[0].y);
-        for (let i = 1; i < s.pts.length - 1; i++) {
-            const mx = (s.pts[i].x+s.pts[i+1].x)/2, my = (s.pts[i].y+s.pts[i+1].y)/2;
-            octx.quadraticCurveTo(s.pts[i].x, s.pts[i].y, mx, my);
+        for (let i = 1; i < s.pts.length-1; i++) {
+            const mx=(s.pts[i].x+s.pts[i+1].x)/2, my=(s.pts[i].y+s.pts[i+1].y)/2;
+            octx.quadraticCurveTo(s.pts[i].x,s.pts[i].y,mx,my);
         }
-        octx.lineTo(s.pts[s.pts.length-1].x, s.pts[s.pts.length-1].y);
+        octx.lineTo(s.pts[s.pts.length-1].x,s.pts[s.pts.length-1].y);
         octx.stroke();
     }
 
-    // Restore
-    vpX = savedVpX; vpY = savedVpY; zoom = savedZoom;
+    const dataUrl = offscreen.toDataURL("image/png");
+    const fileName = "drawsync-" + Date.now() + ".png";
 
-    const link = document.createElement("a");
-    link.download = "drawsync-" + Date.now() + ".png";
-    link.href = offscreen.toDataURL("image/png");
-    link.click();
+    // Android WebView — use Web Share API
+    if (navigator.share && navigator.canShare) {
+        offscreen.toBlob(blob => {
+            const file = new File([blob], fileName, { type: "image/png" });
+            if (navigator.canShare({ files: [file] })) {
+                navigator.share({ files: [file], title: "DrawSync" })
+                    .catch(err => console.log("Share cancelled", err));
+            } else {
+                // Fallback — direct download
+                const link = document.createElement("a");
+                link.download = fileName;
+                link.href = dataUrl;
+                link.click();
+            }
+        });
+    } else {
+        // Desktop browser
+        const link = document.createElement("a");
+        link.download = fileName;
+        link.href = dataUrl;
+        link.click();
+    }
 }
 
 // ===== TOOLBAR =====
