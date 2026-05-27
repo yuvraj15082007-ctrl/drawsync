@@ -260,27 +260,38 @@ const MM_W = 120, MM_H = 90;
 minimap.width = MM_W; minimap.height = MM_H;
 
 function updateMinimap() {
-    mmCtx.clearRect(0, 0, MM_W, MM_H);
-    // Background
+    const mm = document.getElementById("minimap");
+    const mw = mm.width;
+    const mh = mm.height;
+
+    mmCtx.clearRect(0, 0, mw, mh);
     mmCtx.fillStyle = "#1a1a1a";
-    mmCtx.fillRect(0, 0, MM_W, MM_H);
+    mmCtx.fillRect(0, 0, mw, mh);
 
-    const scale = MM_W / WORLD_SIZE;
+    // Scale: world 0..WORLD_SIZE -> minimap 0..mw / 0..mh
+    const scaleX = mw / WORLD_SIZE;
+    const scaleY = mh / WORLD_SIZE;
 
-    // Draw strokes on minimap
-    mmCtx.strokeStyle = "#666";
-    mmCtx.lineWidth = 0.5;
+    function wx(x) { return x * scaleX; }
+    function wy(y) { return y * scaleY; }
+
+    // Draw strokes
     const strokeMap = {};
     for (const s of allStrokes) {
         const isShape = ["rect","circle","line","triangle","arrow","star"].includes(s.type);
         if (isShape) {
             mmCtx.strokeStyle = s.color;
-            mmCtx.lineWidth = 0.5;
+            mmCtx.lineWidth = 0.8;
             mmCtx.beginPath();
-            mmCtx.rect(s.x0*scale, s.y0*scale*(MM_H/MM_W)*(MM_W/MM_H), (s.x1-s.x0)*scale, (s.y1-s.y0)*scale);
-            mmCtx.stroke();
+            if (s.type === "rect") {
+                mmCtx.strokeRect(wx(s.x0), wy(s.y0), wx(s.x1 - s.x0), wy(s.y1 - s.y0));
+            } else {
+                mmCtx.moveTo(wx(s.x0), wy(s.y0));
+                mmCtx.lineTo(wx(s.x1), wy(s.y1));
+                mmCtx.stroke();
+            }
         } else {
-            const key = (s.uid||"l")+"_"+(s.sid||"0");
+            const key = (s.uid||"l") + "_" + (s.sid||"0");
             if (!strokeMap[key]) strokeMap[key] = { color: s.color, pts: [] };
             if (strokeMap[key].pts.length === 0) strokeMap[key].pts.push({ x: s.x0, y: s.y0 });
             strokeMap[key].pts.push({ x: s.x1, y: s.y1 });
@@ -290,29 +301,29 @@ function updateMinimap() {
         const s = strokeMap[k];
         if (s.pts.length < 2) continue;
         mmCtx.strokeStyle = s.color;
-        mmCtx.lineWidth = 0.5;
+        mmCtx.lineWidth = 0.8;
         mmCtx.beginPath();
-        mmCtx.moveTo(s.pts[0].x * scale, s.pts[0].y * scale * (MM_H/MM_W) * (MM_W/MM_H));
+        mmCtx.moveTo(wx(s.pts[0].x), wy(s.pts[0].y));
         for (let i = 1; i < s.pts.length; i++) {
-            mmCtx.lineTo(s.pts[i].x * scale, s.pts[i].y * scale * (MM_H/MM_W) * (MM_W/MM_H));
+            mmCtx.lineTo(wx(s.pts[i].x), wy(s.pts[i].y));
         }
         mmCtx.stroke();
     }
 
-    // Viewport rect
-    const vx = vpX * scale;
-    const vy = vpY * scale * (MM_H / WORLD_SIZE) * (WORLD_SIZE / MM_W);
-    const vw = (canvas.width / zoom) * scale;
-    const vh = (canvas.height / zoom) * scale * (MM_H/MM_W) * (MM_W/MM_H);
+    // Viewport rect (yellow box showing current view)
+    const vx = wx(vpX);
+    const vy = wy(vpY);
+    const vw = wx(canvas.width / zoom);
+    const vh = wy(canvas.height / zoom);
     mmCtx.strokeStyle = "#e8ff47";
     mmCtx.lineWidth = 1.5;
     mmCtx.strokeRect(vx, vy, vw, vh);
 
-    // Remote cursors on minimap
+    // Remote cursors
     for (const uid in remoteCursors) {
         const c = remoteCursors[uid];
         mmCtx.beginPath();
-        mmCtx.arc(c.x * scale, c.y * scale * (MM_H/MM_W) * (MM_W/MM_H), 3, 0, Math.PI*2);
+        mmCtx.arc(wx(c.x), wy(c.y), 3, 0, Math.PI * 2);
         mmCtx.fillStyle = c.color;
         mmCtx.fill();
     }
@@ -321,8 +332,8 @@ function updateMinimap() {
 // Click minimap to jump
 minimap.addEventListener("click", e => {
     const rect = minimap.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) / MM_W;
-    const my = (e.clientY - rect.top) / MM_H;
+    const mx = (e.clientX - rect.left) / minimap.width;
+    const my = (e.clientY - rect.top) / minimap.height;
     vpX = mx * WORLD_SIZE - (canvas.width / zoom) / 2;
     vpY = my * WORLD_SIZE - (canvas.height / zoom) / 2;
     redrawAll();
@@ -833,7 +844,6 @@ function resetView() {
 let minimapExpanded = false;
 function toggleMinimap() {
     const wrap = document.getElementById("minimapWrap");
-    const icon = document.getElementById("minimapIcon");
     const mm = document.getElementById("minimap");
 
     if (wrap.classList.contains("collapsed")) {
@@ -844,10 +854,11 @@ function toggleMinimap() {
     } else if (!minimapExpanded) {
         // normal → expanded
         minimapExpanded = true;
+        wrap.classList.remove("collapsed");
         wrap.classList.add("expanded");
-        mm.width = 220; mm.height = 160;
+        mm.width = 240; mm.height = 180;
     } else {
-        // expanded → collapsed
+        // expanded → collapsed (just header visible)
         minimapExpanded = false;
         wrap.classList.remove("expanded");
         wrap.classList.add("collapsed");
