@@ -39,12 +39,6 @@
 <!-- Canvas -->
 <canvas id="canvas"></canvas>
 
-<!-- Minimap — bottom left -->
-<div class="minimap-wrap" id="minimapWrap">
-    <div class="minimap-label">MAP</div>
-    <canvas id="minimap"></canvas>
-</div>
-
 <!-- Floating Chat — top left -->
 <div class="chatBox" id="chatBox">
     <div class="chat-header" onclick="toggleChat()">
@@ -61,11 +55,24 @@
     </div>
 </div>
 
+<!-- Toolbar toggle button (visible when toolbar hidden) -->
+<button class="tb-show-btn hidden" id="tbShowBtn" onclick="showToolbar()" title="Show toolbar">☰</button>
+
 <!-- Vertical Toolbar — right -->
 <div class="toolbar" id="toolbar">
 
+    <!-- Hide toolbar button -->
+    <button class="tb-hide-btn" onclick="hideToolbar()" title="Hide toolbar">✕</button>
+
     <div class="tb-logo">DS</div>
     <div class="tb-room" id="roomInfo" title="Room">pub</div>
+
+    <!-- MINIMAP inside toolbar -->
+    <div class="tb-minimap-wrap">
+        <div class="minimap-label">MAP</div>
+        <canvas id="minimap"></canvas>
+    </div>
+
     <div class="tb-divider"></div>
 
     <!-- BRUSH -->
@@ -73,7 +80,7 @@
         <button class="tool-btn active" id="btn-brush-group" onclick="selectBrush('pen','Pen', event)" title="Pen">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
         </button>
-        <span class="tb-label" id="label-brush-group">Pen</span>
+        <span class="tb-label">Pen</span>
     </div>
 
     <!-- ERASER -->
@@ -136,14 +143,14 @@
 
     <!-- Undo / Redo -->
     <div class="tb-item">
-        <button class="tool-btn" onclick="undoAction()" title="Undo (Ctrl+Z)">
+        <button class="tool-btn" onclick="undoAction()" title="Undo">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
         </button>
         <span class="tb-label">Undo</span>
     </div>
 
     <div class="tb-item">
-        <button class="tool-btn" onclick="redoAction()" title="Redo (Ctrl+Y)">
+        <button class="tool-btn" onclick="redoAction()" title="Redo">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
         </button>
         <span class="tb-label">Redo</span>
@@ -192,6 +199,14 @@
         <span class="tb-label">Clear</span>
     </div>
 
+    <!-- Zoom controls inside toolbar at bottom -->
+    <div class="tb-divider"></div>
+    <div class="tb-zoom-row">
+        <button onclick="zoomAt(window.innerWidth/2,window.innerHeight/2,1.25)" title="Zoom In">+</button>
+        <button onclick="resetView()" title="Reset">⊙</button>
+        <button onclick="zoomAt(window.innerWidth/2,window.innerHeight/2,0.8)" title="Zoom Out">−</button>
+    </div>
+
 </div>
 
 <!-- Size popup -->
@@ -199,13 +214,6 @@
     <div class="size-popup-label">Size: <span id="sizePopupVal">3</span>px</div>
     <input type="range" id="brushSize" min="1" max="50" value="3">
     <button onclick="closeSizePopup()">Done</button>
-</div>
-
-<!-- Zoom controls — bottom right -->
-<div class="zoom-controls">
-    <button onclick="zoomAt(window.innerWidth/2, window.innerHeight/2, 1.25)" title="Zoom In">+</button>
-    <button onclick="zoomAt(window.innerWidth/2, window.innerHeight/2, 0.8)" title="Zoom Out">−</button>
-    <button onclick="resetView()" title="Reset View">⊙</button>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
