@@ -186,9 +186,9 @@ function drawShapeWorld(tool, wx0, wy0, wx1, wy1, c, size) {
 // ===== REDRAW ALL =====
 function redrawAll() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Draw grid (subtle)
     drawGrid();
-    // Draw all strokes
+
+    // Draw committed strokes
     const strokeMap = {};
     for (const s of allStrokes) {
         const isShape = ["rect","circle","line","triangle","arrow","star"].includes(s.type);
@@ -205,7 +205,15 @@ function redrawAll() {
         const s = strokeMap[k];
         drawFullStrokeWorld(s.pts, s.tool, s.color, s.size);
     }
-    // Draw remote cursors
+
+    // Draw active (in-progress) strokes from ALL users
+    for (const key in activeLocalStrokes) {
+        const s = activeLocalStrokes[key];
+        if (s.pts && s.pts.length >= 2) {
+            drawFullStrokeWorld(s.pts, s.tool || "pen", s.color || color, s.size || brushSize);
+        }
+    }
+
     drawCursors();
 }
 
@@ -443,9 +451,9 @@ function moveDraw(clientX, clientY) {
         }});
 
     } else if (SHAPE_TOOLS.includes(currentTool) && shapeStart) {
-        // Shape preview — redraw all + shape on top
+        // Shape preview — restore snapshot strokes then redraw all active + shape on top
         allStrokes = [...previewStrokeSnapshot];
-        redrawAll();
+        redrawAll(); // this now includes activeLocalStrokes too
         drawShapeWorld(currentTool, shapeStart.x, shapeStart.y, wp.x, wp.y, color, brushSize);
     }
 }
@@ -654,25 +662,26 @@ socket.on("draw", stroke => {
 
     const isShape = ["rect","circle","line","triangle","arrow","star"].includes(stroke.type);
     if (isShape) {
-        // Shapes: redraw all (shape preview needs clean canvas)
-        redrawAll();
+        // Shape — just draw it on top, no full redraw needed
+        drawShapeWorld(stroke.type, stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
     } else {
-        // Brush: draw incrementally using smooth curve with prev point
+        // Brush — track in activeLocalStrokes and draw incrementally
         const key = (stroke.uid||"r") + "_" + (stroke.sid||"0");
         if (!activeLocalStrokes[key]) {
-            activeLocalStrokes[key] = { pts: [{ x: stroke.x0, y: stroke.y0 }] };
+            activeLocalStrokes[key] = {
+                tool: stroke.brushType||"pen",
+                color: stroke.color,
+                size: stroke.size,
+                pts: [{ x: stroke.x0, y: stroke.y0 }]
+            };
         }
         activeLocalStrokes[key].pts.push({ x: stroke.x1, y: stroke.y1 });
 
-        // Draw smooth segment
+        // Draw only last few points for smooth incremental rendering
         const pts = activeLocalStrokes[key].pts;
         const len = pts.length;
-        if (len >= 2) {
-            drawFullStrokeWorld(
-                pts.slice(Math.max(0, len-3)),
-                stroke.brushType||"pen", stroke.color, stroke.size
-            );
-        }
+        const segPts = pts.slice(Math.max(0, len - 3));
+        drawFullStrokeWorld(segPts, stroke.brushType||"pen", stroke.color, stroke.size);
     }
     updateMinimap();
 });
