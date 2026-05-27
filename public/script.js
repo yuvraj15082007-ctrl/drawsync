@@ -693,7 +693,6 @@ socket.on("strokeEnd", ({ uid, sid }) => {
     updateMinimap();
 });
 
-socket.on("strokeEnd", () => { updateMinimap(); });
 
 socket.on("cursor", ({ uid, name, color: c, x, y }) => {
     remoteCursors[uid] = { name, color: c, x, y };
@@ -841,10 +840,44 @@ function downloadImage() {
     // Restore
     vpX = savedVpX; vpY = savedVpY; zoom = savedZoom;
 
-    const link = document.createElement("a");
-    link.download = "drawsync-" + Date.now() + ".png";
-    link.href = offscreen.toDataURL("image/png");
-    link.click();
+    const dataUrl = offscreen.toDataURL("image/png");
+    const fileName = "drawsync-" + Date.now() + ".png";
+
+    // Android native bridge
+    if (window.AndroidSave) {
+        window.AndroidSave.saveImage(dataUrl);
+        return;
+    }
+
+    // Android WebView — Web Share API
+    if (navigator.share && navigator.canShare) {
+        offscreen.toBlob(blob => {
+            const file = new File([blob], fileName, { type: "image/png" });
+            if (navigator.canShare({ files: [file] })) {
+                navigator.share({ files: [file], title: "DrawSync" })
+                    .catch(err => console.log("Share cancelled", err));
+            } else {
+                const link = document.createElement("a");
+                link.download = fileName;
+                link.href = dataUrl;
+                link.click();
+            }
+        });
+    } else {
+        // Desktop browser
+        const link = document.createElement("a");
+        link.download = fileName;
+        link.href = dataUrl;
+        link.click();
+    }
+}
+
+// replayAllStrokes — alias (loadStrokes uses redrawAll directly)
+function replayAllStrokes(strokes) {
+    allStrokes = strokes;
+    Object.keys(activeLocalStrokes).forEach(k => delete activeLocalStrokes[k]);
+    redrawAll();
+    updateMinimap();
 }
 
 // ===== TOOLBAR =====
@@ -1015,86 +1048,286 @@ function resetView() {
     updateMinimap();
 }
 
-// ===== TUTORIAL =====
+
+
+// ===== INTERACTIVE TUTORIAL =====
 const TUTORIAL_STEPS = [
     {
-        emoji: "✏️",
-        title: "Welcome to DrawSync!",
-        text: "Real-time collaborative whiteboard. Draw together with anyone, anywhere. Let's show you around!"
+        title: "Welcome to DrawSync! ✏️",
+        description: "Real-time collaborative whiteboard. Let's show you everything — step by step!",
+        target: null, // center screen, no highlight
+        position: "center"
     },
     {
-        emoji: "🎨",
-        title: "Drawing Tools",
-        text: "Use the <span class='t-highlight'>toolbar on the right</span> to switch tools.",
-        tags: ["PEN — draw freely", "ERASER — erase", "SHAPES — rect, circle, arrow & more", "SIZE — brush size 1–200", "COLOR — pick any color"]
+        title: "Pen Tool 🖊️",
+        description: "Tap here to draw freely on the canvas. This is your main drawing tool!",
+        target: "#btn-brush-group",
+        position: "left"
     },
     {
-        emoji: "🔍",
-        title: "Zoom & Pan",
-        text: "This is an <span class='t-highlight'>infinite canvas</span> — explore freely!",
-        tags: ["Pinch — zoom in/out", "2 fingers drag — pan", "Scroll wheel — zoom (desktop)", "Space + drag — pan (desktop)", "+ ⊙ − buttons — zoom controls"]
+        title: "Eraser 🧹",
+        description: "Made a mistake? Tap the Eraser to rub it out. Increase size for bigger erasing.",
+        target: "#btn-eraser",
+        position: "left"
     },
     {
-        emoji: "🗺️",
-        title: "Minimap",
-        text: "The <span class='t-highlight'>MAP widget</span> (bottom right) shows where everyone is drawing. <span class='t-highlight'>Tap it</span> to jump to any location. Tap header to expand/collapse.",
-        tags: ["Yellow box = your view", "Colored dots = other users"]
+        title: "Shapes 🔷",
+        description: "Tap Shapes to draw rectangles, circles, arrows, triangles, stars and lines!",
+        target: "#btn-shapes-group",
+        position: "left"
     },
     {
-        emoji: "👥",
-        title: "Collaborate!",
-        text: "Create or join a <span class='t-highlight'>private room</span> to draw with friends. See each other's cursors in real-time!",
-        tags: ["NEW — create private room", "JOIN — enter room PIN", "QUIT — go back to public", "💬 Chat — send messages"]
+        title: "Pick a Color 🎨",
+        description: "Tap the color circle to pick any color for your pen or shapes.",
+        target: "#colorPicker",
+        position: "left"
+    },
+    {
+        title: "Brush Size 📏",
+        description: "Tap SIZE to open the slider. Set brush size from 1 to 200px.",
+        target: ".size-btn",
+        position: "left"
+    },
+    {
+        title: "Undo & Redo ↩️",
+        description: "Made a mistake? UNDO removes your last stroke. REDO brings it back. Synced with everyone!",
+        target: "[onclick='undoAction()']",
+        position: "left"
+    },
+    {
+        title: "Save Your Drawing 💾",
+        description: "Tap SAVE to download the canvas as a PNG image — only the drawn area is saved!",
+        target: "[onclick='downloadImage()']",
+        position: "left"
+    },
+    {
+        title: "Rooms 🚪",
+        description: "NEW creates a private room with a PIN. Share the PIN with friends — only they can join!",
+        target: "[onclick='createRoom()']",
+        position: "left"
+    },
+    {
+        title: "Zoom & Pan 🔍",
+        description: "Use + and − to zoom. Tap ⊙ to reset view. On mobile: pinch to zoom, 2 fingers to pan!",
+        target: ".zoom-controls",
+        position: "top"
+    },
+    {
+        title: "Minimap 🗺️",
+        description: "The MAP shows the full canvas. Yellow box = your view. Tap map to jump anywhere. Colored dots = other users!",
+        target: "#minimapWrap",
+        position: "top"
+    },
+    {
+        title: "Live Chat 💬",
+        description: "Tap the Chat box to send messages to everyone in your room in real time!",
+        target: "#chatBox",
+        position: "bottom"
+    },
+    {
+        title: "You're ready! 🚀",
+        description: "Start drawing, invite friends, and create together. Have fun!",
+        target: null,
+        position: "center"
     }
 ];
 
 let tutorialStep = 0;
+let tutorialActive = false;
 
 function initTutorial() {
-    // Show only first time
     if (localStorage.getItem("ds_tutorial_done")) return;
-    setTimeout(() => {
-        document.getElementById("tutorialOverlay").classList.remove("hidden");
-        renderTutorialStep(0);
-    }, 800);
+    setTimeout(() => startTutorial(), 900);
 }
 
-function renderTutorialStep(step) {
-    const s = TUTORIAL_STEPS[step];
-    const content = document.getElementById("tutorialContent");
+function startTutorial() {
+    tutorialActive = true;
+    tutorialStep = 0;
+    showTutorialStep(0);
+}
 
-    let tagsHtml = "";
-    if (s.tags) {
-        tagsHtml = `<div class="t-img">${s.tags.map(t => `<span class="t-tag">${t}</span>`).join("")}</div>`;
+function showTutorialStep(index) {
+    // Remove existing tutorial elements
+    removeTutorialUI();
+
+    if (index >= TUTORIAL_STEPS.length) {
+        endTutorial();
+        return;
     }
 
-    content.innerHTML = `
-        <span class="t-emoji">${s.emoji}</span>
-        <h3>${s.title}</h3>
-        <p>${s.text}</p>
-        ${tagsHtml}
+    const step = TUTORIAL_STEPS[index];
+    const total = TUTORIAL_STEPS.length;
+
+    // Create overlay with hole
+    const overlay = document.createElement("div");
+    overlay.id = "tut-overlay";
+    overlay.style.cssText = `
+        position:fixed;inset:0;z-index:3000;
+        pointer-events:none;
+    `;
+    document.body.appendChild(overlay);
+
+    // Target element highlight
+    let targetRect = null;
+    if (step.target) {
+        const el = document.querySelector(step.target);
+        if (el) {
+            targetRect = el.getBoundingClientRect();
+            // Highlight ring
+            const ring = document.createElement("div");
+            ring.id = "tut-ring";
+            ring.style.cssText = `
+                position:fixed;
+                left:${targetRect.left - 6}px;
+                top:${targetRect.top - 6}px;
+                width:${targetRect.width + 12}px;
+                height:${targetRect.height + 12}px;
+                border:2.5px solid #e8ff47;
+                border-radius:12px;
+                z-index:3001;
+                pointer-events:none;
+                box-shadow:0 0 0 2000px rgba(0,0,0,0.55);
+                animation: tutPulse 1.2s ease-in-out infinite;
+            `;
+            document.body.appendChild(ring);
+        }
+    } else {
+        // Full dim overlay for center steps
+        const dim = document.createElement("div");
+        dim.style.cssText = `
+            position:fixed;inset:0;
+            background:rgba(0,0,0,0.7);
+            z-index:3000;
+            pointer-events:none;
+        `;
+        overlay.appendChild(dim);
+    }
+
+    // Tooltip box
+    const box = document.createElement("div");
+    box.id = "tut-box";
+
+    // Position tooltip
+    let boxStyle = "";
+    if (!targetRect || step.position === "center") {
+        boxStyle = `
+            position:fixed;
+            left:50%;top:50%;
+            transform:translate(-50%,-50%);
+        `;
+    } else if (step.position === "left") {
+        const rightEdge = targetRect.left - 14;
+        const topPos = Math.min(
+            Math.max(targetRect.top - 20, 10),
+            window.innerHeight - 220
+        );
+        boxStyle = `
+            position:fixed;
+            right:${window.innerWidth - rightEdge}px;
+            top:${topPos}px;
+        `;
+    } else if (step.position === "top") {
+        boxStyle = `
+            position:fixed;
+            left:50%;
+            bottom:${window.innerHeight - targetRect.top + 14}px;
+            transform:translateX(-50%);
+        `;
+    } else if (step.position === "bottom") {
+        boxStyle = `
+            position:fixed;
+            left:12px;
+            top:${targetRect.bottom + 14}px;
+        `;
+    }
+
+    // Arrow direction
+    let arrowHtml = "";
+    if (targetRect && step.position === "left") {
+        arrowHtml = `<div class="tut-arrow tut-arrow-right"></div>`;
+    } else if (targetRect && step.position === "top") {
+        arrowHtml = `<div class="tut-arrow tut-arrow-down"></div>`;
+    } else if (targetRect && step.position === "bottom") {
+        arrowHtml = `<div class="tut-arrow tut-arrow-up"></div>`;
+    }
+
+    box.style.cssText = boxStyle + `
+        z-index:3002;
+        background:#161616;
+        border:1px solid rgba(232,255,71,0.3);
+        border-radius:14px;
+        padding:16px;
+        width:220px;
+        box-shadow:0 8px 32px rgba(0,0,0,0.6);
+        animation:tutSlide 0.25s cubic-bezier(0.34,1.4,0.64,1);
+        pointer-events:all;
     `;
 
-    // Update step indicators
-    document.querySelectorAll(".t-step").forEach((el, i) => {
-        el.classList.toggle("active", i === step);
-    });
+    // Progress dots
+    const dots = Array.from({length: total}, (_, i) =>
+        `<span style="
+            display:inline-block;
+            width:${i===index?'16px':'7px'};height:7px;
+            border-radius:4px;
+            background:${i===index?'#e8ff47':'rgba(255,255,255,0.2)'};
+            margin:0 2px;
+            transition:all 0.2s;
+        "></span>`
+    ).join("");
 
-    // Last step button
-    const btn = document.getElementById("tutorialNextBtn");
-    btn.textContent = step === TUTORIAL_STEPS.length - 1 ? "Let's Draw! 🚀" : "Next →";
+    const isLast = index === total - 1;
+
+    box.innerHTML = `
+        ${arrowHtml}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-family:'Space Mono',monospace;font-size:0.55rem;color:#666;">${index+1} / ${total}</span>
+            <button onclick="skipTutorial()" style="
+                background:rgba(255,255,255,0.08);
+                border:1px solid rgba(255,255,255,0.12);
+                color:#888;padding:3px 10px;
+                border-radius:6px;font-size:0.7rem;
+                font-family:'Syne',sans-serif;
+                cursor:pointer;font-weight:700;
+            ">Skip ✕</button>
+        </div>
+        <div style="display:flex;gap:3px;margin-bottom:12px;">${dots}</div>
+        <h3 style="font-family:'Syne',sans-serif;font-size:0.95rem;font-weight:800;color:#f0f0f0;margin-bottom:6px;">${step.title}</h3>
+        <p style="font-family:'Space Mono',monospace;font-size:0.68rem;color:#888;line-height:1.6;margin-bottom:14px;">${step.description}</p>
+        <button onclick="nextTutorialStep()" style="
+            width:100%;padding:10px;
+            background:#e8ff47;border:none;
+            border-radius:9px;color:#000;
+            font-size:0.88rem;font-weight:800;
+            font-family:'Syne',sans-serif;
+            cursor:pointer;
+        ">${isLast ? "Let's Draw! 🚀" : "Next →"}</button>
+    `;
+
+    document.body.appendChild(box);
+}
+
+function removeTutorialUI() {
+    ["tut-overlay","tut-ring","tut-box"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    });
+    // Remove any arrow-less rings
+    document.querySelectorAll("[id^='tut-']").forEach(el => el.remove());
 }
 
 function nextTutorialStep() {
     tutorialStep++;
-    if (tutorialStep >= TUTORIAL_STEPS.length) {
-        skipTutorial();
-        return;
-    }
-    renderTutorialStep(tutorialStep);
+    showTutorialStep(tutorialStep);
 }
 
 function skipTutorial() {
-    document.getElementById("tutorialOverlay").classList.add("hidden");
+    removeTutorialUI();
+    tutorialActive = false;
+    localStorage.setItem("ds_tutorial_done", "1");
+}
+
+function endTutorial() {
+    removeTutorialUI();
+    tutorialActive = false;
     localStorage.setItem("ds_tutorial_done", "1");
 }
