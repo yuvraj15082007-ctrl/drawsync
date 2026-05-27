@@ -25,6 +25,7 @@ function worldToScreen(wx, wy) {
 }
 
 function resizeCanvas() {
+    // Simple resize - no DPR scaling to avoid box issue
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     canvas.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;touch-action:none;z-index:0;background:#fff;";
@@ -255,8 +256,10 @@ function drawCursors() {
 // ===== MINIMAP =====
 const minimap = document.getElementById("minimap");
 const mmCtx = minimap.getContext("2d");
-const MM_W = 160, MM_H = 100;
+const MM_W = 50, MM_H = 50;
 minimap.width = MM_W; minimap.height = MM_H;
+    minimap.style.width = MM_W + "px";
+    minimap.style.height = MM_H + "px";
 
 function updateMinimap() {
     mmCtx.clearRect(0, 0, MM_W, MM_H);
@@ -817,6 +820,26 @@ function toggleChat() {
     const chevron = document.getElementById("chatChevron");
     box.classList.toggle("collapsed");
     if (chevron) chevron.style.transform = box.classList.contains("collapsed") ? "rotate(180deg)" : "";
+}
+
+// ===== RESET VIEW =====
+function resetView() {
+    zoom = 1;
+    vpX = 0;
+    vpY = 0;
+    redrawAll();
+    updateMinimap();
+}
+
+// ===== TOOLBAR HIDE/SHOW =====
+function hideToolbar() {
+    document.getElementById("toolbar").classList.add("hidden");
+    document.getElementById("tbShowBtn").classList.remove("hidden");
+}
+
+function showToolbar() {
+    document.getElementById("toolbar").classList.remove("hidden");
+    document.getElementById("tbShowBtn").classList.add("hidden");
 }
 
 // ===== RESET VIEW =====
