@@ -444,14 +444,14 @@ canvas#canvas {
 
 /* Expanded (big) state */
 .minimap-wrap.expanded #minimap {
-    width: 220px !important;
-    height: 160px !important;
+    width: 240px;
+    height: 180px;
 }
 
 /* Normal state */
 .minimap-wrap:not(.expanded):not(.collapsed) #minimap {
-    width: 120px !important;
-    height: 90px !important;
+    width: 120px;
+    height: 90px;
 }
 
 /* ===== ZOOM CONTROLS floating ===== */
