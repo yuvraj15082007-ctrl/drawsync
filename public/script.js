@@ -256,10 +256,8 @@ function drawCursors() {
 // ===== MINIMAP =====
 const minimap = document.getElementById("minimap");
 const mmCtx = minimap.getContext("2d");
-const MM_W = 50, MM_H = 50;
+const MM_W = 120, MM_H = 90;
 minimap.width = MM_W; minimap.height = MM_H;
-    minimap.style.width = MM_W + "px";
-    minimap.style.height = MM_H + "px";
 
 function updateMinimap() {
     mmCtx.clearRect(0, 0, MM_W, MM_H);
@@ -828,6 +826,32 @@ function resetView() {
     vpX = 0;
     vpY = 0;
     redrawAll();
+    updateMinimap();
+}
+
+// ===== MINIMAP TOGGLE =====
+let minimapExpanded = false;
+function toggleMinimap() {
+    const wrap = document.getElementById("minimapWrap");
+    const icon = document.getElementById("minimapIcon");
+    const mm = document.getElementById("minimap");
+
+    if (wrap.classList.contains("collapsed")) {
+        // collapsed → normal
+        wrap.classList.remove("collapsed");
+        mm.width = 120; mm.height = 90;
+        minimapExpanded = false;
+    } else if (!minimapExpanded) {
+        // normal → expanded
+        minimapExpanded = true;
+        wrap.classList.add("expanded");
+        mm.width = 220; mm.height = 160;
+    } else {
+        // expanded → collapsed
+        minimapExpanded = false;
+        wrap.classList.remove("expanded");
+        wrap.classList.add("collapsed");
+    }
     updateMinimap();
 }
 
