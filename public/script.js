@@ -591,6 +591,12 @@ socket.on("undoSync", strokes => {
     updateMinimap();
 });
 
+socket.on("redoSync", strokes => {
+    allStrokes = strokes;
+    redrawAll();
+    updateMinimap();
+});
+
 socket.on("loadStrokes", strokes => {
     allStrokes = strokes;
     redrawAll();
@@ -640,6 +646,7 @@ function redoAction() {
     allStrokes = JSON.parse(redoStack.pop());
     redrawAll();
     updateMinimap();
+    socket.emit("syncRedo", { pin: currentRoom, strokes: allStrokes });
 }
 
 // ===== SAVE — crop to drawn area =====
