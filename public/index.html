@@ -55,6 +55,22 @@
     </div>
 </div>
 
+<!-- Minimap — above toolbar, right side -->
+<div class="minimap-wrap" id="minimapWrap">
+    <div class="minimap-header" onclick="toggleMinimap()">
+        <span class="minimap-label">MAP</span>
+        <span class="minimap-toggle-icon" id="minimapIcon">⛶</span>
+    </div>
+    <canvas id="minimap"></canvas>
+</div>
+
+<!-- Zoom controls — floating, above minimap -->
+<div class="zoom-controls">
+    <button onclick="zoomAt(window.innerWidth/2,window.innerHeight/2,1.25)" title="Zoom In">+</button>
+    <button onclick="resetView()" title="Reset">⊙</button>
+    <button onclick="zoomAt(window.innerWidth/2,window.innerHeight/2,0.8)" title="Zoom Out">−</button>
+</div>
+
 <!-- Toolbar toggle button (visible when toolbar hidden) -->
 <button class="tb-show-btn hidden" id="tbShowBtn" onclick="showToolbar()" title="Show toolbar">☰</button>
 
@@ -66,12 +82,6 @@
 
     <div class="tb-logo">DS</div>
     <div class="tb-room" id="roomInfo" title="Room">pub</div>
-
-    <!-- MINIMAP inside toolbar -->
-    <div class="tb-minimap-wrap">
-        <div class="minimap-label">MAP</div>
-        <canvas id="minimap"></canvas>
-    </div>
 
     <div class="tb-divider"></div>
 
@@ -197,14 +207,6 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </button>
         <span class="tb-label">Clear</span>
-    </div>
-
-    <!-- Zoom controls inside toolbar at bottom -->
-    <div class="tb-divider"></div>
-    <div class="tb-zoom-row">
-        <button onclick="zoomAt(window.innerWidth/2,window.innerHeight/2,1.25)" title="Zoom In">+</button>
-        <button onclick="resetView()" title="Reset">⊙</button>
-        <button onclick="zoomAt(window.innerWidth/2,window.innerHeight/2,0.8)" title="Zoom Out">−</button>
     </div>
 
 </div>
