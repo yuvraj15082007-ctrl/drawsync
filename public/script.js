@@ -790,8 +790,13 @@ function downloadImage() {
         link.href = dataUrl;
         link.click();
     }
-}
 
+// Android WebView bridge
+if (window.AndroidSave) {
+    window.AndroidSave.saveImage(dataUrl);
+    return;
+}
+}
 // ===== TOOLBAR =====
 function toggleSubmenu(id, event) {
     if (event) event.stopPropagation();
