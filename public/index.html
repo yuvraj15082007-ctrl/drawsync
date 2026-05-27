@@ -218,6 +218,33 @@
     <button onclick="closeSizePopup()">Done</button>
 </div>
 
+<!-- Tutorial Overlay -->
+<div id="tutorialOverlay" class="tutorial-overlay hidden">
+    <div class="tutorial-box">
+
+        <!-- Step indicators -->
+        <div class="tutorial-steps">
+            <span class="t-step active" id="ts0"></span>
+            <span class="t-step" id="ts1"></span>
+            <span class="t-step" id="ts2"></span>
+            <span class="t-step" id="ts3"></span>
+            <span class="t-step" id="ts4"></span>
+        </div>
+
+        <!-- Step content -->
+        <div class="tutorial-content" id="tutorialContent">
+            <!-- filled by JS -->
+        </div>
+
+        <!-- Buttons -->
+        <div class="tutorial-actions">
+            <button class="t-skip" onclick="skipTutorial()">Skip</button>
+            <button class="t-next" id="tutorialNextBtn" onclick="nextTutorialStep()">Next →</button>
+        </div>
+
+    </div>
+</div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
 </body>
