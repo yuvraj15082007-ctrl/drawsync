@@ -498,3 +498,148 @@ canvas#canvas {
     .minimap-wrap:not(.expanded):not(.collapsed) #minimap { width: 100px !important; height: 75px !important; }
     .minimap-wrap.expanded #minimap { width: 180px !important; height: 130px !important; }
 }
+
+/* ===== TUTORIAL ===== */
+.tutorial-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.82);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(6px);
+    animation: fadeIn 0.3s ease;
+}
+.tutorial-overlay.hidden { display: none !important; }
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.tutorial-box {
+    background: #161616;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 28px 24px 20px;
+    width: min(340px, 88vw);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    animation: slideUp 0.35s cubic-bezier(0.34,1.4,0.64,1);
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(30px) scale(0.95); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.tutorial-steps {
+    display: flex;
+    gap: 6px;
+}
+.t-step {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    transition: all 0.2s;
+}
+.t-step.active {
+    background: #e8ff47;
+    width: 20px;
+    border-radius: 4px;
+}
+
+.tutorial-content {
+    text-align: center;
+    width: 100%;
+}
+
+.tutorial-content .t-emoji {
+    font-size: 3rem;
+    margin-bottom: 10px;
+    display: block;
+}
+
+.tutorial-content h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #f0f0f0;
+    margin-bottom: 8px;
+}
+
+.tutorial-content p {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: #888;
+    line-height: 1.6;
+}
+
+.tutorial-content .t-highlight {
+    color: #e8ff47;
+    font-weight: 700;
+}
+
+.tutorial-content .t-img {
+    width: 100%;
+    border-radius: 10px;
+    margin: 10px 0;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: #0f0f0f;
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.t-tag {
+    background: rgba(232,255,71,0.12);
+    border: 1px solid rgba(232,255,71,0.3);
+    color: #e8ff47;
+    font-size: 0.62rem;
+    font-family: 'Space Mono', monospace;
+    padding: 3px 8px;
+    border-radius: 6px;
+    display: inline-block;
+    margin: 2px;
+}
+
+.tutorial-actions {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}
+
+.t-skip {
+    flex: 1;
+    padding: 10px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    color: #666;
+    font-size: 0.82rem;
+    font-family: 'Syne', sans-serif;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.t-skip:hover { color: #aaa; border-color: rgba(255,255,255,0.2); }
+
+.t-next {
+    flex: 2;
+    padding: 10px;
+    background: #e8ff47;
+    border: none;
+    border-radius: 10px;
+    color: #000;
+    font-size: 0.88rem;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    cursor: pointer;
+    transition: transform 0.15s;
+}
+.t-next:hover { transform: translateY(-1px); }
