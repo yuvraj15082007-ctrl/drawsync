@@ -82,6 +82,12 @@ io.on("connection", (socket) => {
         io.to(pin).emit("undoSync", strokes);
     });
 
+    socket.on("syncRedo", ({ pin, strokes }) => {
+        if (!rooms[pin]) return;
+        rooms[pin].strokes = strokes;
+        socket.to(pin).emit("redoSync", strokes);
+    });
+
     socket.on("clearBoard", (pin) => {
         if (!rooms[pin]) return;
         rooms[pin].strokes = [];
