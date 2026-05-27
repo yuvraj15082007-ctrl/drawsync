@@ -21,14 +21,14 @@ html, body {
     font-family: 'Syne', sans-serif;
 }
 
-/* ===== CANVAS ===== */
-canvas {
+canvas#canvas {
     position: fixed;
     top: 0; left: 0;
     width: 100vw; height: 100vh;
     background: #fff;
     touch-action: none;
     z-index: 0;
+    cursor: crosshair;
 }
 
 /* ===== TOOLBAR ===== */
@@ -41,18 +41,66 @@ canvas {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 18px;
-    padding: 8px 0 10px;
+    padding: 6px 0 8px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 1px;
     width: var(--tb-w);
     max-height: 96vh;
-    overflow: visible;
+    overflow-y: auto;
+    overflow-x: visible;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    scrollbar-width: none;
+    transition: opacity 0.2s, transform 0.2s;
 }
+.toolbar::-webkit-scrollbar { display: none; }
+.toolbar.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%) translateX(80px);
+}
+
+/* Hide button inside toolbar */
+.tb-hide-btn {
+    width: 24px; height: 24px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px;
+    margin-bottom: 2px;
+    transition: all 0.15s;
+    align-self: flex-end;
+    margin-right: 6px;
+}
+.tb-hide-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
+
+/* Show button (floating, visible when toolbar hidden) */
+.tb-show-btn {
+    position: fixed;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    z-index: 101;
+    width: 36px; height: 36px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 1rem;
+    cursor: pointer;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+}
+.tb-show-btn:hover { color: var(--accent); border-color: var(--accent); }
+.tb-show-btn.hidden { display: none; }
 
 .tb-logo {
     font-family: 'Syne', sans-serif;
@@ -60,7 +108,7 @@ canvas {
     font-size: 0.72rem;
     color: var(--accent);
     letter-spacing: 1px;
-    padding: 4px 0 1px;
+    padding: 2px 0 0;
 }
 
 .tb-room {
@@ -72,7 +120,34 @@ canvas {
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: center;
-    padding: 0 4px 3px;
+    padding: 0 4px 2px;
+}
+
+/* ===== MINIMAP inside toolbar ===== */
+.tb-minimap-wrap {
+    width: 54px;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 4px;
+    margin: 2px 0;
+    cursor: crosshair;
+}
+
+.minimap-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.4rem;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 1px;
+    text-align: center;
+    margin-bottom: 2px;
+}
+
+#minimap {
+    display: block;
+    width: 46px !important;
+    height: 46px !important;
+    border-radius: 4px;
 }
 
 .tb-divider {
@@ -98,7 +173,7 @@ canvas {
     color: var(--text-dim);
     letter-spacing: 0.2px;
     text-transform: uppercase;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
 }
 
 .tool-btn {
@@ -120,6 +195,28 @@ canvas {
 .tool-btn.danger { color: var(--danger); }
 .tool-btn.danger:hover { background: rgba(255,71,71,0.15); border-color: var(--danger); }
 
+/* ===== ZOOM ROW inside toolbar ===== */
+.tb-zoom-row {
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+    padding: 2px 4px;
+}
+.tb-zoom-row button {
+    width: 16px; height: 22px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    padding: 0;
+}
+.tb-zoom-row button:hover { color: var(--accent); border-color: var(--accent); }
+
 /* ===== SUBMENU ===== */
 .submenu {
     position: absolute;
@@ -139,12 +236,10 @@ canvas {
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
     animation: submenuIn 0.18s cubic-bezier(0.34,1.4,0.64,1);
 }
-
 @keyframes submenuIn {
     from { opacity: 0; transform: translateY(-50%) scale(0.88); }
     to   { opacity: 1; transform: translateY(-50%) scale(1); }
 }
-
 .submenu.hidden { display: none; }
 
 .sub-btn {
@@ -208,7 +303,7 @@ canvas {
 .size-popup input[type=range] { width: 100%; accent-color: var(--accent); margin-bottom: 10px; display: block; }
 .size-popup button { width: 100%; background: var(--accent); color: #000; border: none; border-radius: 8px; padding: 7px; font-size: 0.8rem; font-weight: 700; font-family: 'Syne', sans-serif; cursor: pointer; }
 
-/* ===== TRANSPARENT CHAT — top left ===== */
+/* ===== CHAT ===== */
 .chatBox {
     position: fixed;
     top: 12px; left: 12px;
@@ -232,9 +327,7 @@ canvas {
     user-select: none;
 }
 .chat-header:hover { background: rgba(255,255,255,0.04); }
-
 .chat-meta { display: flex; align-items: center; gap: 5px; }
-
 .online-badge { font-size: 0.62rem; color: var(--accent2); font-family: 'Space Mono', monospace; }
 
 #messages {
@@ -244,7 +337,6 @@ canvas {
 }
 #messages::-webkit-scrollbar { width: 3px; }
 #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
 #messages div {
     font-size: 0.7rem; line-height: 1.4;
     color: rgba(240,240,240,0.9);
@@ -277,7 +369,6 @@ canvas {
     border: none; padding: 5px 9px; border-radius: 8px;
     font-size: 0.78rem; font-weight: 700; cursor: pointer; flex-shrink: 0;
 }
-
 .chatBox.collapsed #messages,
 .chatBox.collapsed .chat-input-row { display: none; }
 
@@ -289,7 +380,6 @@ canvas {
     z-index: 1000; backdrop-filter: blur(10px);
 }
 .modal-overlay.hidden { display: none !important; }
-
 .modal-box {
     background: #161616;
     border: 1px solid rgba(255,255,255,0.1);
@@ -352,81 +442,7 @@ canvas {
     .submenu { min-width: 82px; }
     .sub-btn { padding: 6px 8px; font-size: 0.7rem; }
     .size-popup { right: 68px; }
-    }
-    
-
-/* ===== MINIMAP ===== */
-.minimap-wrap {
-    position: fixed;
-    bottom: 16px;
-    left: 16px;
-    z-index: 100;
-    background: rgba(16,16,16,0.88);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px;
-    padding: 6px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    user-select: none;
-}
-
-.minimap-label {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.45rem;
-    color: rgba(255,255,255,0.3);
-    letter-spacing: 1px;
-    text-align: center;
-    margin-bottom: 3px;
-}
-
-#minimap {
-    display: block;
-    width: 160px;
-    height: 100px;
-    border-radius: 6px;
-    cursor: crosshair;
-}
-
-/* ===== ZOOM CONTROLS ===== */
-.zoom-controls {
-    position: fixed;
-    bottom: 16px;
-    right: 78px;
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.zoom-controls button {
-    width: 32px;
-    height: 32px;
-    background: rgba(16,16,16,0.88);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 8px;
-    color: #f0f0f0;
-    font-size: 1.1rem;
-    font-weight: 700;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(10px);
-    transition: all 0.15s;
-}
-.zoom-controls button:hover {
-    background: rgba(232,255,71,0.15);
-    border-color: rgba(232,255,71,0.4);
-    color: #e8ff47;
-}
-
-/* ===== CURSOR LABEL (canvas drawn, but keep canvas cursor crosshair) ===== */
-canvas { cursor: crosshair; }
-
-/* ===== MOBILE minimap smaller ===== */
-@media (max-width: 480px) {
-    #minimap { width: 120px; height: 75px; }
-    .zoom-controls { right: 68px; bottom: 12px; }
-    .minimap-wrap { bottom: 12px; left: 12px; }
+    .tb-show-btn { right: 5px; }
+    #minimap { width: 40px !important; height: 40px !important; }
+    .tb-minimap-wrap { width: 48px; }
 }
