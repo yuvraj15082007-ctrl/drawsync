@@ -214,6 +214,16 @@ canvas#canvas {
     transition: all 0.13s;
 }
 .sub-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+.submenu-section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.42rem;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 4px;
+    margin-top: 2px;
+}
 .sub-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); border-color: var(--border); }
 .sub-btn.active { color: #000; background: var(--accent); border-color: var(--accent); }
 
@@ -536,3 +546,4 @@ canvas#canvas {
     border-right: 8px solid transparent;
     border-bottom: 10px solid rgba(232,255,71,0.3);
 }
+
