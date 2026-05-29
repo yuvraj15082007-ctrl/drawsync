@@ -112,7 +112,19 @@ function applyBrushStyle(tool, c, size) {
     ctx.lineJoin = "round";
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
-    ctx.lineWidth = tool === "eraser" ? size * 4 * zoom : size * zoom;
+
+    if (tool === "eraser") {
+        ctx.lineWidth = size * 4 * zoom;
+    } else if (tool === "glow") {
+        ctx.lineWidth = size * zoom;
+        ctx.shadowBlur = size * 4 * zoom;
+        ctx.shadowColor = c;
+        ctx.globalAlpha = 0.9;
+    } else if (tool === "spray") {
+        ctx.lineWidth = 1;
+    } else {
+        ctx.lineWidth = size * zoom;
+    }
 }
 
 function resetCtx() {
@@ -192,6 +204,13 @@ function redrawAll() {
     // Draw committed strokes
     const strokeMap = {};
     for (const s of allStrokes) {
+        if (s.type === "text") {
+            const sp = worldToScreen(s.x0, s.y0);
+            ctx.fillStyle = s.color;
+            ctx.font = `${s.size + 10}px Syne, sans-serif`;
+            ctx.fillText(s.text, sp.x, sp.y);
+            continue;
+        }
         const isShape = ["rect","circle","line","triangle","arrow","star"].includes(s.type);
         if (isShape) {
             drawShapeWorld(s.type, s.x0, s.y0, s.x1, s.y1, s.color, s.size);
@@ -204,7 +223,11 @@ function redrawAll() {
     }
     for (const k in strokeMap) {
         const s = strokeMap[k];
-        drawFullStrokeWorld(s.pts, s.tool, s.color, s.size);
+        if (s.tool === "spray") {
+            for (const pt of s.pts) drawSpray(pt.x, pt.y, s.color, s.size);
+        } else {
+            drawFullStrokeWorld(s.pts, s.tool, s.color, s.size);
+        }
     }
 
     // Draw active (in-progress) strokes from ALL users
@@ -387,11 +410,15 @@ minimap.addEventListener("click", e => {
 });
 
 // ===== DRAWING =====
-const BRUSH_TOOLS = ["pen", "eraser"];
+const BRUSH_TOOLS = ["pen", "eraser", "spray", "glow"];
 const SHAPE_TOOLS = ["rect", "circle", "line", "triangle", "arrow", "star"];
+const SPECIAL_TOOLS = ["text", "fill", "eyedropper"];
 
 function getWorldPos(clientX, clientY) {
-    return screenToWorld(clientX, clientY);
+    const rect = canvas.getBoundingClientRect();
+    const sx = (clientX - rect.left) * (canvas.width / rect.width);
+    const sy = (clientY - rect.top) * (canvas.height / rect.height);
+    return screenToWorld(sx, sy);
 }
 
 let previewStrokeSnapshot = null;
@@ -399,11 +426,25 @@ let previewStrokeSnapshot = null;
 function startDraw(clientX, clientY) {
     const wp = getWorldPos(clientX, clientY);
 
+    // Handle special tools on click
+    if (currentTool === "fill") {
+        saveSnapshot();
+        floodFill(wp.x, wp.y, color);
+        return;
+    }
+    if (currentTool === "eyedropper") {
+        eyedropperPick(wp.x, wp.y);
+        return;
+    }
+    if (currentTool === "text") {
+        showTextInput(wp.x, wp.y, clientX, clientY);
+        return;
+    }
+
     if (BRUSH_TOOLS.includes(currentTool)) {
         saveSnapshot();
         currentStrokeId++;
         points = [wp];
-        // Track this stroke locally for smooth drawing
         const key = "local_" + currentStrokeId;
         activeLocalStrokes[key] = {
             tool: currentTool,
@@ -435,21 +476,40 @@ function moveDraw(clientX, clientY) {
         const prev = points[points.length - 1];
         points.push(wp);
 
-        // Update local active stroke points
         const key = "local_" + currentStrokeId;
         if (activeLocalStrokes[key]) {
             activeLocalStrokes[key].pts.push(wp);
         }
 
-        // Draw just the new segment incrementally — no canvas wipe
-        drawFullStrokeWorld([prev, wp], currentTool, drawColor, brushSize);
-
-        // Emit
-        socket.emit("draw", { pin: currentRoom, stroke: {
-            type: "brush", brushType: currentTool,
-            x0: prev.x, y0: prev.y, x1: wp.x, y1: wp.y,
-            color: drawColor, size: brushSize, sid: currentStrokeId
-        }});
+        if (currentTool === "spray") {
+            drawSpray(wp.x, wp.y, drawColor, brushSize);
+            socket.emit("draw", { pin: currentRoom, stroke: {
+                type: "brush", brushType: "spray",
+                x0: wp.x, y0: wp.y, x1: wp.x, y1: wp.y,
+                color: drawColor, size: brushSize, sid: currentStrokeId
+            }});
+        } else {
+            drawFullStrokeWorld([prev, wp], currentTool, drawColor, brushSize);
+            // For glow — draw extra blur layer on top for intensity
+            if (currentTool === "glow") {
+                ctx.shadowBlur = brushSize * 8;
+                ctx.shadowColor = drawColor;
+                ctx.globalAlpha = 0.3;
+                applyBrushStyle("glow", drawColor, brushSize * 0.5);
+                const sp0 = worldToScreen(prev.x, prev.y);
+                const sp1 = worldToScreen(wp.x, wp.y);
+                ctx.beginPath();
+                ctx.moveTo(sp0.x, sp0.y);
+                ctx.lineTo(sp1.x, sp1.y);
+                ctx.stroke();
+                resetCtx();
+            }
+            socket.emit("draw", { pin: currentRoom, stroke: {
+                type: "brush", brushType: currentTool,
+                x0: prev.x, y0: prev.y, x1: wp.x, y1: wp.y,
+                color: drawColor, size: brushSize, sid: currentStrokeId
+            }});
+        }
 
     } else if (SHAPE_TOOLS.includes(currentTool) && shapeStart) {
         // Shape preview — restore snapshot strokes then redraw all active + shape on top
@@ -538,7 +598,7 @@ canvas.addEventListener("mousedown", e => {
 
 canvas.addEventListener("mousemove", e => {
     // Emit cursor even when not drawing
-    const wp = screenToWorld(e.clientX, e.clientY);
+    const wp = getWorldPos(e.clientX, e.clientY);
     const now = Date.now();
     if (now - cursorThrottle > 50) {
         socket.emit("cursor", { pin: currentRoom, x: wp.x, y: wp.y });
@@ -661,12 +721,20 @@ canvas.addEventListener("touchcancel", e => {
 socket.on("draw", stroke => {
     allStrokes.push(stroke);
 
+    // Text stroke
+    if (stroke.type === "text") {
+        const sp = worldToScreen(stroke.x0, stroke.y0);
+        ctx.fillStyle = stroke.color;
+        ctx.font = `${stroke.size + 10}px Syne, sans-serif`;
+        ctx.fillText(stroke.text, sp.x, sp.y);
+        updateMinimap();
+        return;
+    }
+
     const isShape = ["rect","circle","line","triangle","arrow","star"].includes(stroke.type);
     if (isShape) {
-        // Shape — just draw it on top, no full redraw needed
         drawShapeWorld(stroke.type, stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
     } else {
-        // Brush — track in activeLocalStrokes and draw incrementally
         const key = (stroke.uid||"r") + "_" + (stroke.sid||"0");
         if (!activeLocalStrokes[key]) {
             activeLocalStrokes[key] = {
@@ -678,11 +746,16 @@ socket.on("draw", stroke => {
         }
         activeLocalStrokes[key].pts.push({ x: stroke.x1, y: stroke.y1 });
 
-        // Draw only last few points for smooth incremental rendering
         const pts = activeLocalStrokes[key].pts;
         const len = pts.length;
         const segPts = pts.slice(Math.max(0, len - 3));
-        drawFullStrokeWorld(segPts, stroke.brushType||"pen", stroke.color, stroke.size);
+
+        if (stroke.brushType === "spray") {
+            drawSpray(stroke.x1, stroke.y1, stroke.color, stroke.size);
+        } else {
+            // pen, glow, eraser all use drawFullStrokeWorld
+            drawFullStrokeWorld(segPts, stroke.brushType||"pen", stroke.color, stroke.size);
+        }
     }
     updateMinimap();
 });
@@ -922,6 +995,18 @@ function selectShape(tool, label, event) {
     document.getElementById("shapes-menu").classList.add("hidden");
 }
 
+function selectSpecialTool(tool, label, event) {
+    if (event) event.stopPropagation();
+    currentTool = tool;
+    document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById("btn-" + tool)?.classList.add("active");
+    document.getElementById("label-shapes-group").textContent = label;
+    document.getElementById("btn-shapes-group").classList.add("active");
+    document.getElementById("btn-brush-group")?.classList.remove("active");
+    document.getElementById("btn-eraser")?.classList.remove("active");
+    document.getElementById("shapes-menu").classList.add("hidden");
+}
+
 function setTool(tool) {
     currentTool = tool;
     if (tool === "eraser") {
@@ -1071,8 +1156,8 @@ const TUTORIAL_STEPS = [
         position: "left"
     },
     {
-        title: "Shapes 🔷",
-        description: "Tap Shapes to draw rectangles, circles, arrows, triangles, stars and lines!",
+        title: "Tools 🔷",
+        description: "Tap Tools to draw rectangles, circles, arrows, triangles, stars and lines!",
         target: "#btn-shapes-group",
         position: "left"
     },
@@ -1330,4 +1415,85 @@ function endTutorial() {
     removeTutorialUI();
     tutorialActive = false;
     localStorage.setItem("ds_tutorial_done", "1");
+}
+
+// ===== TEXT TOOL =====
+function showTextInput(wx, wy, clientX, clientY) {
+    // Remove existing input
+    const existing = document.getElementById("text-input-wrap");
+    if (existing) existing.remove();
+
+    const wrap = document.createElement("div");
+    wrap.id = "text-input-wrap";
+    wrap.style.cssText = `
+        position:fixed;
+        left:${Math.min(clientX, window.innerWidth - 220)}px;
+        top:${Math.min(clientY - 20, window.innerHeight - 100)}px;
+        z-index:500;
+        display:flex;
+        gap:6px;
+        align-items:center;
+    `;
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Type here...";
+    input.maxLength = 100;
+    input.style.cssText = `
+        background:#161616;
+        border:1.5px solid #e8ff47;
+        color:#f0f0f0;
+        padding:6px 10px;
+        border-radius:8px;
+        font-size:${brushSize + 10}px;
+        font-family:'Syne',sans-serif;
+        outline:none;
+        width:180px;
+    `;
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.textContent = "✓";
+    confirmBtn.style.cssText = `
+        background:#e8ff47;color:#000;
+        border:none;border-radius:8px;
+        width:30px;height:30px;
+        font-size:1rem;font-weight:700;
+        cursor:pointer;flex-shrink:0;
+    `;
+
+    wrap.appendChild(input);
+    wrap.appendChild(confirmBtn);
+    document.body.appendChild(wrap);
+    input.focus();
+
+    function commitText() {
+        const txt = input.value.trim();
+        wrap.remove();
+        if (!txt) return;
+        saveSnapshot();
+        // Draw text on canvas
+        const sp = worldToScreen(wx, wy);
+        ctx.fillStyle = color;
+        ctx.font = `${brushSize + 10}px Syne, sans-serif`;
+        ctx.fillText(txt, sp.x, sp.y);
+        // Save as stroke for sync
+        allStrokes.push({
+            type: "text", text: txt,
+            x0: wx, y0: wy, x1: wx, y1: wy,
+            color, size: brushSize,
+            uid: "local", sid: currentStrokeId++
+        });
+        socket.emit("draw", { pin: currentRoom, stroke: {
+            type: "text", text: txt,
+            x0: wx, y0: wy, x1: wx, y1: wy,
+            color, size: brushSize
+        }});
+        updateMinimap();
+    }
+
+    confirmBtn.onclick = commitText;
+    input.addEventListener("keydown", e => {
+        if (e.key === "Enter") commitText();
+        if (e.key === "Escape") wrap.remove();
+    });
 }
