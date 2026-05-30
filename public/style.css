@@ -50,6 +50,7 @@ canvas#canvas {
     max-height: 96vh;
     overflow-y: auto;
     overflow-x: visible;
+    overflow: visible;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
@@ -174,10 +175,8 @@ canvas#canvas {
 
 /* ===== SUBMENU ===== */
 .submenu {
-    position: absolute;
-    right: calc(100% + 8px);
-    top: 50%;
-    transform: translateY(-50%);
+    position: fixed;
+    right: 78px;
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -185,8 +184,10 @@ canvas#canvas {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    z-index: 300;
-    min-width: 90px;
+    z-index: 500;
+    min-width: 110px;
+    max-height: 80vh;
+    overflow-y: auto;
     backdrop-filter: blur(16px);
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
     animation: submenuIn 0.18s cubic-bezier(0.34,1.4,0.64,1);
@@ -499,7 +500,7 @@ canvas#canvas {
     .toolbar { right: 5px; }
     .tool-btn { width: 34px; height: 32px; padding: 7px; }
     .chatBox { width: 175px; }
-    .submenu { min-width: 82px; }
+    .submenu { min-width: 82px; right: 68px; }
     .sub-btn { padding: 6px 8px; font-size: 0.7rem; }
     .size-popup { right: 68px; }
     .tb-show-btn { right: 5px; }
@@ -545,5 +546,5 @@ canvas#canvas {
     border-left: 8px solid transparent;
     border-right: 8px solid transparent;
     border-bottom: 10px solid rgba(232,255,71,0.3);
-}
-
+    }
+                                                           
