@@ -961,6 +961,21 @@ function toggleSubmenu(id, event) {
     document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
     if (!isOpen) {
         menu.classList.remove("hidden");
+
+        // Position submenu vertically based on trigger button
+        const btn = event ? event.currentTarget : null;
+        if (btn) {
+            const rect = btn.getBoundingClientRect();
+            const menuH = menu.scrollHeight || 300;
+            let top = rect.top;
+            // Keep within screen
+            if (top + menuH > window.innerHeight - 10) {
+                top = window.innerHeight - menuH - 10;
+            }
+            if (top < 10) top = 10;
+            menu.style.top = top + "px";
+        }
+
         if (id === "shapes-menu") {
             document.getElementById("btn-eraser")?.classList.remove("active");
             document.getElementById("btn-brush-group")?.classList.remove("active");
