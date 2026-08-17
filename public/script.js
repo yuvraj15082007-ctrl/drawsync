@@ -43,6 +43,7 @@ let userName = "";
 let myColor = "#4d96ff";
 
 let shapeStart = null;
+let protractorState = null; // { vertex, arm1 } once the first arm is placed
 let previewSnapshot = null;
 
 let undoStack = [];
@@ -56,6 +57,12 @@ let activeLocalStrokes = {}; // uid_sid -> pts, for incremental local drawing
 
 const remoteCursors = {}; // uid → { name, color, x, y (world) }
 let cursorThrottle = 0;
+
+// ===== TEACHING ROOM state =====
+let roomMode = "normal";   // "normal" | "teaching"
+let isTeacher = false;
+let canDraw = true;        // whether THIS user is currently allowed to draw
+let handRaised = false;
 
 // ===== PAN state =====
 let isPanning = false;
@@ -81,10 +88,10 @@ function submitName() {
 }
 document.getElementById("nameInput")?.addEventListener("keydown", e => { if (e.key === "Enter") submitName(); });
 
-function joinRoomSocket(pin) {
+function joinRoomSocket(pin, mode) {
     currentRoom = pin;
     allStrokes = [];
-    socket.emit("joinRoom", { pin, name: userName });
+    socket.emit("joinRoom", { pin, name: userName, mode });
 }
 
 // ===== ZOOM helpers =====
@@ -120,8 +127,6 @@ function applyBrushStyle(tool, c, size) {
         ctx.shadowBlur = size * 4 * zoom;
         ctx.shadowColor = c;
         ctx.globalAlpha = 0.9;
-    } else if (tool === "spray") {
-        ctx.lineWidth = 1;
     } else {
         ctx.lineWidth = size * zoom;
     }
@@ -131,7 +136,6 @@ function resetCtx() {
     ctx.globalAlpha = 1; ctx.shadowBlur = 0;
     ctx.lineCap = "round"; ctx.lineJoin = "round";
 }
-
 // ===== DRAW HELPERS (world coords → screen) =====
 function drawFullStrokeWorld(pts, tool, c, size) {
     if (pts.length < 2) return;
@@ -192,10 +196,80 @@ function drawShapeWorld(tool, wx0, wy0, wx1, wy1, c, size) {
             i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
         }
         ctx.closePath(); ctx.stroke();
+    } else if (tool === "ruler") {
+        // Measured straight line with end ticks + a live length label (world units).
+        ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.stroke();
+        const angle = Math.atan2(p1.y-p0.y, p1.x-p0.x);
+        const tickLen = 8;
+        [p0,p1].forEach(p => {
+            ctx.beginPath();
+            ctx.moveTo(p.x - tickLen*Math.sin(angle), p.y + tickLen*Math.cos(angle));
+            ctx.lineTo(p.x + tickLen*Math.sin(angle), p.y - tickLen*Math.cos(angle));
+            ctx.stroke();
+        });
+        const distWorld = Math.hypot(wx1-wx0, wy1-wy0);
+        const mx=(p0.x+p1.x)/2, my=(p0.y+p1.y)/2;
+        ctx.font = "bold 12px 'Space Mono', monospace";
+        const label = Math.round(distWorld) + "px";
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.fillRect(mx-tw/2-4, my-20, tw+8, 16);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(label, mx-tw/2, my-8);
+    } else if (tool === "compass") {
+        // Center-drag circle (like a real compass) with a radius label.
+        const cx=p0.x, cy=p0.y;
+        const r = Math.hypot(p1.x-p0.x, p1.y-p0.y);
+        ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx,cy,2.5,0,Math.PI*2); ctx.fillStyle=c; ctx.fill();
+        const distWorld = Math.hypot(wx1-wx0, wy1-wy0);
+        ctx.font = "bold 12px 'Space Mono', monospace";
+        const label = "r=" + Math.round(distWorld) + "px";
+        const tw = ctx.measureText(label).width;
+        const lx = cx + r*0.707, ly = cy - r*0.707;
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.fillRect(lx-tw/2-4, ly-20, tw+8, 16);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(label, lx-tw/2, ly-8);
     }
     resetCtx();
 }
 
+function drawProtractorWorld(x0,y0,x1,y1,x2,y2,c,size) {
+    const v = worldToScreen(x0,y0);
+    const a = worldToScreen(x1,y1);
+    const b = worldToScreen(x2,y2);
+    ctx.strokeStyle = c; ctx.lineWidth = (size||2) * zoom;
+    ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.beginPath(); ctx.moveTo(v.x,v.y); ctx.lineTo(a.x,a.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(v.x,v.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    ctx.beginPath(); ctx.arc(v.x,v.y,3,0,Math.PI*2); ctx.fillStyle=c; ctx.fill();
+
+    const ang1 = Math.atan2(a.y-v.y, a.x-v.x);
+    const ang2 = Math.atan2(b.y-v.y, b.x-v.x);
+    let diff = ang2 - ang1;
+    while (diff <= -Math.PI) diff += Math.PI*2;
+    while (diff > Math.PI) diff -= Math.PI*2;
+    const degrees = Math.abs(diff * 180 / Math.PI);
+    const arcR = 30;
+    ctx.beginPath();
+    ctx.strokeStyle = "#e8ff47";
+    ctx.lineWidth = 1.5;
+    ctx.arc(v.x, v.y, arcR, ang1, ang2, diff < 0);
+    ctx.stroke();
+
+    const midAngle = ang1 + diff/2;
+    const lx = v.x + (arcR+18)*Math.cos(midAngle);
+    const ly = v.y + (arcR+18)*Math.sin(midAngle);
+    const label = Math.round(degrees) + "°";
+    ctx.font = "bold 12px 'Space Mono', monospace";
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = "rgba(0,0,0,0.75)";
+    ctx.fillRect(lx-tw/2-4, ly-10, tw+8, 16);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(label, lx-tw/2, ly+2);
+    resetCtx();
+}
 // ===== REDRAW ALL =====
 function redrawAll() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -211,7 +285,11 @@ function redrawAll() {
             ctx.fillText(s.text, sp.x, sp.y);
             continue;
         }
-        const isShape = ["rect","circle","line","triangle","arrow","star"].includes(s.type);
+        if (s.type === "protractor") {
+            drawProtractorWorld(s.x0, s.y0, s.x1, s.y1, s.x2, s.y2, s.color, s.size);
+            continue;
+        }
+        const isShape = ["rect","circle","line","triangle","arrow","star","ruler","compass"].includes(s.type);
         if (isShape) {
             drawShapeWorld(s.type, s.x0, s.y0, s.x1, s.y1, s.color, s.size);
         } else {
@@ -223,11 +301,7 @@ function redrawAll() {
     }
     for (const k in strokeMap) {
         const s = strokeMap[k];
-        if (s.tool === "spray") {
-            for (const pt of s.pts) drawSpray(pt.x, pt.y, s.color, s.size);
-        } else {
-            drawFullStrokeWorld(s.pts, s.tool, s.color, s.size);
-        }
+        drawFullStrokeWorld(s.pts, s.tool, s.color, s.size);
     }
 
     // Draw active (in-progress) strokes from ALL users
@@ -241,12 +315,15 @@ function redrawAll() {
     drawCursors();
 }
 
+let graphMode = false; // teacher-toggleable "graph paper" grid with darker lines + axes
+
 function drawGrid() {
     const gridSize = 50 * zoom;
     if (gridSize < 10) return;
     const offsetX = (-vpX * zoom) % gridSize;
     const offsetY = (-vpY * zoom) % gridSize;
-    ctx.strokeStyle = "rgba(0,0,0,0.04)";
+
+    ctx.strokeStyle = graphMode ? "rgba(0,0,0,0.12)" : "rgba(0,0,0,0.04)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let x = offsetX; x < canvas.width; x += gridSize) {
@@ -256,6 +333,23 @@ function drawGrid() {
         ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
     }
     ctx.stroke();
+
+    if (graphMode) {
+        // Bold axes through world origin (0,0), like graph paper.
+        const origin = worldToScreen(0, 0);
+        ctx.strokeStyle = "rgba(30,100,220,0.35)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, canvas.height);
+        ctx.moveTo(0, origin.y); ctx.lineTo(canvas.width, origin.y);
+        ctx.stroke();
+    }
+}
+
+function toggleGraphMode() {
+    graphMode = !graphMode;
+    document.getElementById("btn-graph")?.classList.toggle("active", graphMode);
+    redrawAll();
 }
 
 // ===== CURSORS =====
@@ -339,7 +433,7 @@ function updateMinimap() {
     // Draw strokes
     const strokeMap = {};
     for (const s of allStrokes) {
-        const isShape = ["rect","circle","line","triangle","arrow","star"].includes(s.type);
+        const isShape = ["rect","circle","line","triangle","arrow","star","ruler","compass","protractor"].includes(s.type);
         if (isShape) {
             mmCtx.strokeStyle = s.color;
             mmCtx.lineWidth = 0.8;
@@ -394,7 +488,6 @@ function updateMinimap() {
     mm._scaleX = scaleX; mm._scaleY = scaleY;
     mm._offX = offX; mm._offY = offY;
 }
-
 // Click minimap to jump
 minimap.addEventListener("click", e => {
     if (!minimap._scaleX) return;
@@ -410,9 +503,9 @@ minimap.addEventListener("click", e => {
 });
 
 // ===== DRAWING =====
-const BRUSH_TOOLS = ["pen", "eraser", "spray", "glow"];
-const SHAPE_TOOLS = ["rect", "circle", "line", "triangle", "arrow", "star"];
-const SPECIAL_TOOLS = ["text", "fill", "eyedropper", "cut", "scale"];
+const BRUSH_TOOLS = ["pen", "eraser", "glow"];
+const SHAPE_TOOLS = ["rect", "circle", "line", "triangle", "arrow", "star", "ruler", "compass"];
+const SPECIAL_TOOLS = ["text", "fill", "eyedropper", "cut", "scale", "protractor"];
 
 function getWorldPos(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
@@ -424,6 +517,12 @@ function getWorldPos(clientX, clientY) {
 let previewStrokeSnapshot = null;
 
 function startDraw(clientX, clientY) {
+    // Teaching Room gate: students without permission can't use any tool.
+    if (roomMode === "teaching" && !canDraw) {
+        showTeachToast("Ask the teacher for drawing permission ✋");
+        return;
+    }
+
     const wp = getWorldPos(clientX, clientY);
 
     // Handle special tools on click
@@ -447,6 +546,16 @@ function startDraw(clientX, clientY) {
     }
     if (currentTool === "text") {
         showTextInput(wp.x, wp.y, clientX, clientY);
+        return;
+    }
+    if (currentTool === "protractor") {
+        saveSnapshot();
+        if (!protractorState) {
+            // First drag: place the vertex + first arm.
+            protractorState = { vertex: wp };
+        }
+        // Second drag begins here too — vertex already fixed from stage 1.
+        drawing = true;
         return;
     }
 
@@ -495,41 +604,45 @@ function moveDraw(clientX, clientY) {
             activeLocalStrokes[key].pts.push(wp);
         }
 
-        if (currentTool === "spray") {
-            drawSpray(wp.x, wp.y, drawColor, brushSize);
-            socket.emit("draw", { pin: currentRoom, stroke: {
-                type: "brush", brushType: "spray",
-                x0: wp.x, y0: wp.y, x1: wp.x, y1: wp.y,
-                color: drawColor, size: brushSize, sid: currentStrokeId
-            }});
-        } else {
-            drawFullStrokeWorld([prev, wp], currentTool, drawColor, brushSize);
-            // For glow — draw extra blur layer on top for intensity
-            if (currentTool === "glow") {
-                ctx.shadowBlur = brushSize * 8;
-                ctx.shadowColor = drawColor;
-                ctx.globalAlpha = 0.3;
-                applyBrushStyle("glow", drawColor, brushSize * 0.5);
-                const sp0 = worldToScreen(prev.x, prev.y);
-                const sp1 = worldToScreen(wp.x, wp.y);
-                ctx.beginPath();
-                ctx.moveTo(sp0.x, sp0.y);
-                ctx.lineTo(sp1.x, sp1.y);
-                ctx.stroke();
-                resetCtx();
-            }
-            socket.emit("draw", { pin: currentRoom, stroke: {
-                type: "brush", brushType: currentTool,
-                x0: prev.x, y0: prev.y, x1: wp.x, y1: wp.y,
-                color: drawColor, size: brushSize, sid: currentStrokeId
-            }});
+        drawFullStrokeWorld([prev, wp], currentTool, drawColor, brushSize);
+        // For glow — draw extra blur layer on top for intensity
+        if (currentTool === "glow") {
+            ctx.shadowBlur = brushSize * 8;
+            ctx.shadowColor = drawColor;
+            ctx.globalAlpha = 0.3;
+            applyBrushStyle("glow", drawColor, brushSize * 0.5);
+            const sp0 = worldToScreen(prev.x, prev.y);
+            const sp1 = worldToScreen(wp.x, wp.y);
+            ctx.beginPath();
+            ctx.moveTo(sp0.x, sp0.y);
+            ctx.lineTo(sp1.x, sp1.y);
+            ctx.stroke();
+            resetCtx();
         }
+        socket.emit("draw", { pin: currentRoom, stroke: {
+            type: "brush", brushType: currentTool,
+            x0: prev.x, y0: prev.y, x1: wp.x, y1: wp.y,
+            color: drawColor, size: brushSize, sid: currentStrokeId
+        }});
 
     } else if (SHAPE_TOOLS.includes(currentTool) && shapeStart) {
         // Shape preview — restore snapshot strokes then redraw all active + shape on top
         allStrokes = [...previewStrokeSnapshot];
         redrawAll(); // this now includes activeLocalStrokes too
         drawShapeWorld(currentTool, shapeStart.x, shapeStart.y, wp.x, wp.y, color, brushSize);
+    } else if (currentTool === "protractor" && protractorState) {
+        redrawAll();
+        if (!protractorState.arm1) {
+            // Stage 1: previewing the first arm as a simple line from the vertex.
+            drawShapeWorld("line", protractorState.vertex.x, protractorState.vertex.y, wp.x, wp.y, color, brushSize);
+        } else {
+            // Stage 2: arm1 is fixed — preview the angle between arm1 and the live arm2.
+            drawProtractorWorld(
+                protractorState.vertex.x, protractorState.vertex.y,
+                protractorState.arm1.x, protractorState.arm1.y,
+                wp.x, wp.y, color, brushSize
+            );
+        }
     }
 }
 
@@ -537,6 +650,35 @@ function endDraw(clientX, clientY) {
     if (!drawing) return;
     drawing = false;
     const wp = getWorldPos(clientX, clientY);
+
+    if (currentTool === "protractor" && protractorState) {
+        if (!protractorState.arm1) {
+            // Stage 1 finished: lock in the first arm, wait for the second drag.
+            protractorState.arm1 = wp;
+            redrawAll();
+            drawShapeWorld("line", protractorState.vertex.x, protractorState.vertex.y, wp.x, wp.y, color, brushSize);
+            points = [];
+            return;
+        }
+        // Stage 2 finished: commit the full protractor stroke.
+        const stroke = {
+            type: "protractor",
+            x0: protractorState.vertex.x, y0: protractorState.vertex.y,
+            x1: protractorState.arm1.x, y1: protractorState.arm1.y,
+            x2: wp.x, y2: wp.y,
+            color, size: brushSize, uid: "local", sid: currentStrokeId++
+        };
+        allStrokes.push(stroke);
+        socket.emit("draw", { pin: currentRoom, stroke: {
+            type: "protractor",
+            x0: stroke.x0, y0: stroke.y0, x1: stroke.x1, y1: stroke.y1, x2: stroke.x2, y2: stroke.y2,
+            color, size: brushSize
+        }});
+        protractorState = null;
+        redrawAll();
+        updateMinimap();
+        return;
+    }
 
     if (SHAPE_TOOLS.includes(currentTool) && shapeStart) {
         const stroke = {
@@ -580,8 +722,8 @@ function cancelDraw() {
     if (drawing) socket.emit("strokeEnd", { pin: currentRoom, sid: currentStrokeId });
     delete activeLocalStrokes["local_" + currentStrokeId];
     drawing = false; points = [];
-}
-
+    protractorState = null;
+        }
 // ===== PAN (two finger or middle mouse or space+drag) =====
 let spaceDown = false;
 document.addEventListener("keydown", e => {
@@ -745,7 +887,13 @@ socket.on("draw", stroke => {
         return;
     }
 
-    const isShape = ["rect","circle","line","triangle","arrow","star"].includes(stroke.type);
+    if (stroke.type === "protractor") {
+        drawProtractorWorld(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.x2, stroke.y2, stroke.color, stroke.size);
+        updateMinimap();
+        return;
+    }
+
+    const isShape = ["rect","circle","line","triangle","arrow","star","ruler","compass"].includes(stroke.type);
     if (isShape) {
         drawShapeWorld(stroke.type, stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color, stroke.size);
     } else {
@@ -764,12 +912,7 @@ socket.on("draw", stroke => {
         const len = pts.length;
         const segPts = pts.slice(Math.max(0, len - 3));
 
-        if (stroke.brushType === "spray") {
-            drawSpray(stroke.x1, stroke.y1, stroke.color, stroke.size);
-        } else {
-            // pen, glow, eraser all use drawFullStrokeWorld
-            drawFullStrokeWorld(segPts, stroke.brushType||"pen", stroke.color, stroke.size);
-        }
+        drawFullStrokeWorld(segPts, stroke.brushType||"pen", stroke.color, stroke.size);
     }
     updateMinimap();
 });
@@ -831,7 +974,189 @@ socket.on("chatMessage", data => {
     box.scrollTop = box.scrollHeight;
     setTimeout(() => div.remove(), 30000);
 });
+// ===== TEACHING ROOM: socket events =====
+socket.on("roomInfo", ({ mode, isTeacher: iAmTeacher, canDraw: allowed }) => {
+    roomMode = mode;
+    isTeacher = iAmTeacher;
+    canDraw = allowed;
+    handRaised = false;
+    updateTeachingUI();
+});
 
+socket.on("teacherPanelUpdate", ({ raised, permitted }) => {
+    if (isTeacher) renderTeacherPanel(raised, permitted);
+});
+
+socket.on("drawGranted", () => {
+    canDraw = true;
+    handRaised = false;
+    updateTeachingUI();
+    showTeachToast("You can draw now! ✏️");
+});
+
+socket.on("drawRevoked", () => {
+    canDraw = false;
+    updateTeachingUI();
+    showTeachToast("Draw permission revoked");
+});
+
+// ===== TEACHING ROOM: VOICE BROADCAST (WebRTC) =====
+// One-to-many: the teacher's mic connects directly to every student via a
+// separate RTCPeerConnection per student. Signaling (offer/answer/ICE) rides
+// on the existing Socket.IO connection; audio itself flows peer-to-peer.
+const RTC_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+let voiceBroadcasting = false;   // true only for the teacher while live
+let localVoiceStream = null;     // teacher's mic MediaStream
+let voicePeers = {};             // teacher: uid -> RTCPeerConnection
+let currentRoster = [];          // teacher: [{uid,name}] of everyone else in the room
+let studentVoicePeer = null;     // student: single RTCPeerConnection to the teacher
+let listeningToTeacher = false;  // student: whether audio is currently connected
+
+socket.on("roster", list => {
+    currentRoster = list;
+    if (voiceBroadcasting) {
+        // New students who joined after broadcasting started still need a peer connection.
+        list.forEach(u => { if (!voicePeers[u.uid]) connectToStudent(u.uid); });
+    }
+});
+
+socket.on("voicePeerLeft", ({ uid }) => {
+    if (voicePeers[uid]) { voicePeers[uid].close(); delete voicePeers[uid]; }
+});
+
+// --- Student side: teacher started/stopped broadcasting ---
+socket.on("voiceStart", () => {
+    showTeachToast("🎙️ Teacher started speaking");
+});
+
+socket.on("voiceStop", () => {
+    showTeachToast("🔇 Teacher stopped speaking");
+    if (studentVoicePeer) { studentVoicePeer.close(); studentVoicePeer = null; }
+    listeningToTeacher = false;
+    removeVoiceIndicator();
+});
+
+// --- Student side: receives an offer from the teacher, answers it ---
+socket.on("voiceOffer", async ({ from, sdp }) => {
+    try {
+        studentVoicePeer = new RTCPeerConnection(RTC_CONFIG);
+        studentVoicePeer.onicecandidate = e => {
+            if (e.candidate) socket.emit("voiceIceCandidate", { pin: currentRoom, to: from, candidate: e.candidate });
+        };
+        studentVoicePeer.ontrack = e => {
+            let audioEl = document.getElementById("teacher-audio");
+            if (!audioEl) {
+                audioEl = document.createElement("audio");
+                audioEl.id = "teacher-audio";
+                audioEl.autoplay = true;
+                document.body.appendChild(audioEl);
+            }
+            audioEl.srcObject = e.streams[0];
+            listeningToTeacher = true;
+            showVoiceIndicator();
+        };
+        await studentVoicePeer.setRemoteDescription(new RTCSessionDescription(sdp));
+        const answer = await studentVoicePeer.createAnswer();
+        await studentVoicePeer.setLocalDescription(answer);
+        socket.emit("voiceAnswer", { pin: currentRoom, to: from, sdp: answer });
+    } catch (err) {
+        console.error("Voice offer handling failed:", err);
+    }
+});
+
+// --- Teacher side: a student answered our offer ---
+socket.on("voiceAnswer", async ({ from, sdp }) => {
+    const pc = voicePeers[from];
+    if (!pc) return;
+    try { await pc.setRemoteDescription(new RTCSessionDescription(sdp)); }
+    catch (err) { console.error("Voice answer handling failed:", err); }
+});
+
+// --- Both sides: relayed ICE candidates ---
+socket.on("voiceIceCandidate", async ({ from, candidate }) => {
+    try {
+        const pc = isTeacher ? voicePeers[from] : studentVoicePeer;
+        if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (err) { console.error("ICE candidate failed:", err); }
+});
+
+// Teacher: create + connect a peer connection to one student, then send an offer.
+async function connectToStudent(uid) {
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    voicePeers[uid] = pc;
+    localVoiceStream.getTracks().forEach(track => pc.addTrack(track, localVoiceStream));
+    pc.onicecandidate = e => {
+        if (e.candidate) socket.emit("voiceIceCandidate", { pin: currentRoom, to: uid, candidate: e.candidate });
+    };
+    try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit("voiceOffer", { pin: currentRoom, to: uid, sdp: offer });
+    } catch (err) {
+        console.error("Failed to connect to student:", uid, err);
+    }
+}
+
+async function toggleVoiceBroadcast() {
+    if (voiceBroadcasting) { stopVoice(); return; }
+
+    try {
+        localVoiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+        showTeachToast("Mic permission denied 🎙️❌");
+        return;
+    }
+
+    voiceBroadcasting = true;
+    socket.emit("voiceStart", { pin: currentRoom });
+    currentRoster.forEach(u => connectToStudent(u.uid));
+    refreshTeacherPanelButtonOnly();
+    showTeachToast("🎙️ Broadcasting live");
+}
+
+function stopVoice(silent) {
+    if (localVoiceStream) { localVoiceStream.getTracks().forEach(t => t.stop()); localVoiceStream = null; }
+    Object.values(voicePeers).forEach(pc => pc.close());
+    voicePeers = {};
+    if (voiceBroadcasting && !silent) socket.emit("voiceStop", { pin: currentRoom });
+    voiceBroadcasting = false;
+    if (studentVoicePeer) { studentVoicePeer.close(); studentVoicePeer = null; }
+    listeningToTeacher = false;
+    removeVoiceIndicator();
+    refreshTeacherPanelButtonOnly();
+}
+
+// Flips just the broadcast button's label/color without rebuilding the whole panel list.
+function refreshTeacherPanelButtonOnly() {
+    const btn = document.getElementById("voice-broadcast-btn");
+    if (!btn) return;
+    btn.textContent = voiceBroadcasting ? "🔴 Stop Broadcasting" : "🎙️ Start Voice Broadcast";
+    btn.style.background = voiceBroadcasting ? "#ff5555" : "#e8ff47";
+    btn.style.color = voiceBroadcasting ? "#fff" : "#000";
+}
+
+function showVoiceIndicator() {
+    if (document.getElementById("voice-indicator")) return;
+    const el = document.createElement("div");
+    el.id = "voice-indicator";
+    el.textContent = "🔊 Listening to teacher";
+    el.style.cssText = `
+        position:fixed;top:16px;left:50%;transform:translateX(-50%);
+        z-index:500;background:#161616;border:1px solid rgba(232,255,71,0.4);
+        color:#e8ff47;padding:6px 14px;border-radius:20px;
+        font-family:'Space Mono',monospace;font-size:0.7rem;
+        box-shadow:0 4px 16px rgba(0,0,0,0.4);
+    `;
+    document.body.appendChild(el);
+}
+
+function removeVoiceIndicator() {
+    const el = document.getElementById("voice-indicator");
+    if (el) el.remove();
+    const audioEl = document.getElementById("teacher-audio");
+    if (audioEl) audioEl.remove();
+}
 // ===== UNDO/REDO =====
 function saveSnapshot() {
     undoStack.push(JSON.stringify(allStrokes));
@@ -1007,6 +1332,7 @@ document.addEventListener("click", e => {
 function selectBrush(tool, label, event) {
     if (event) event.stopPropagation();
     currentTool = tool;
+    protractorState = null;
     document.getElementById("btn-brush-group")?.classList.add("active");
     document.getElementById("btn-shapes-group")?.classList.remove("active");
     document.getElementById("btn-eraser")?.classList.remove("active");
@@ -1015,6 +1341,7 @@ function selectBrush(tool, label, event) {
 function selectShape(tool, label, event) {
     if (event) event.stopPropagation();
     currentTool = tool;
+    protractorState = null;
     document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("btn-" + tool)?.classList.add("active");
     document.getElementById("label-shapes-group").textContent = label;
@@ -1027,6 +1354,7 @@ function selectShape(tool, label, event) {
 function selectSpecialTool(tool, label, event) {
     if (event) event.stopPropagation();
     currentTool = tool;
+    if (tool !== "protractor") protractorState = null;
     document.querySelectorAll(".sub-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("btn-" + tool)?.classList.add("active");
     document.getElementById("label-shapes-group").textContent = label;
@@ -1038,14 +1366,14 @@ function selectSpecialTool(tool, label, event) {
 
 function setTool(tool) {
     currentTool = tool;
+    protractorState = null;
     if (tool === "eraser") {
         document.getElementById("btn-eraser")?.classList.add("active");
         document.getElementById("btn-brush-group")?.classList.remove("active");
         document.getElementById("btn-shapes-group")?.classList.remove("active");
         document.querySelectorAll(".submenu").forEach(m => m.classList.add("hidden"));
     }
-}
-
+            }
 // ===== COLOR & SIZE =====
 document.getElementById("colorPicker").addEventListener("input", e => { color = e.target.value; });
 document.getElementById("brushSize").addEventListener("input", e => {
@@ -1085,6 +1413,145 @@ function createRoom() { showRoomModal("Create New Room", pin => { joinRoomSocket
 function joinRoom()   { showRoomModal("Join Room",       pin => { joinRoomSocket(pin); updateRoomLabel(pin); }); }
 function quitRoom()   { joinRoomSocket("public"); updateRoomLabel("pub"); }
 
+// Teacher creates + owns a Teaching Room. Others join it normally via "Join" with the same PIN.
+function createTeachingRoom() {
+    showRoomModal("Create Teaching Room", pin => {
+        joinRoomSocket(pin, "teaching");
+        updateRoomLabel(pin);
+    });
+}
+
+// ===== TEACHING ROOM: UI =====
+function updateTeachingUI() {
+    removeTeachUI();
+    const teachTools = document.getElementById("teachToolsGroup");
+
+    if (roomMode !== "teaching") {
+        if (teachTools) teachTools.style.display = "none";
+        graphMode = false;
+        stopVoice(true);
+        return;
+    }
+
+    if (isTeacher) {
+        if (teachTools) teachTools.style.display = "";
+        renderTeacherPanel([], []);
+    } else {
+        if (teachTools) teachTools.style.display = "none";
+        renderStudentHandButton();
+    }
+}
+
+function removeTeachUI() {
+    ["teach-hand-btn", "teach-panel", "voice-indicator"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    });
+}
+
+function renderStudentHandButton() {
+    const old = document.getElementById("teach-hand-btn");
+    if (old) old.remove();
+    if (canDraw) return; // already permitted — no need to raise hand
+
+    const btn = document.createElement("button");
+    btn.id = "teach-hand-btn";
+    btn.textContent = handRaised ? "✋ Hand Raised — tap to lower" : "✋ Raise Hand";
+    btn.style.cssText = `
+        position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+        z-index:500;background:${handRaised ? "#333" : "#e8ff47"};
+        color:${handRaised ? "#e8ff47" : "#000"};
+        border:1px solid rgba(232,255,71,0.4);
+        border-radius:10px;padding:10px 18px;
+        font-weight:800;font-size:0.85rem;
+        font-family:'Syne',sans-serif;cursor:pointer;
+    `;
+    btn.onclick = () => {
+        handRaised = !handRaised;
+        socket.emit(handRaised ? "raiseHand" : "lowerHand", { pin: currentRoom });
+        renderStudentHandButton();
+    };
+    document.body.appendChild(btn);
+}
+
+function renderTeacherPanel(raised, permitted) {
+    const old = document.getElementById("teach-panel");
+    if (old) old.remove();
+
+    const wrap = document.createElement("div");
+    wrap.id = "teach-panel";
+    wrap.style.cssText = `
+        position:fixed;top:80px;left:16px;z-index:500;
+        background:#161616;border:1px solid rgba(232,255,71,0.3);
+        border-radius:12px;padding:12px;width:220px;
+        font-family:'Syne',sans-serif;
+        box-shadow:0 8px 32px rgba(0,0,0,0.5);
+        max-height:70vh;overflow-y:auto;
+    `;
+
+    let html = `<div style="color:#e8ff47;font-weight:800;font-size:0.85rem;margin-bottom:10px;">🎓 Teacher Panel</div>`;
+
+    html += `<button id="voice-broadcast-btn" onclick="toggleVoiceBroadcast()" style="
+        width:100%;padding:9px;margin-bottom:12px;
+        background:${voiceBroadcasting ? '#ff5555' : '#e8ff47'};
+        color:${voiceBroadcasting ? '#fff' : '#000'};
+        border:none;border-radius:8px;font-weight:800;
+        font-size:0.78rem;font-family:'Syne',sans-serif;cursor:pointer;">
+        ${voiceBroadcasting ? '🔴 Stop Broadcasting' : '🎙️ Start Voice Broadcast'}
+    </button>`;
+
+    html += `<div style="color:#888;font-size:0.68rem;font-family:'Space Mono',monospace;margin-bottom:4px;">Raised Hands (${raised.length})</div>`;
+    if (raised.length === 0) {
+        html += `<div style="color:#555;font-size:0.68rem;margin-bottom:10px;">No one waiting</div>`;
+    } else {
+        raised.forEach(r => {
+            html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span style="color:#f0f0f0;font-size:0.75rem;">${r.name}</span>
+                <button onclick="grantDraw('${r.uid}')" style="background:#e8ff47;border:none;border-radius:6px;padding:4px 8px;font-size:0.65rem;font-weight:700;cursor:pointer;color:#000;">Allow</button>
+            </div>`;
+        });
+    }
+
+    html += `<div style="color:#888;font-size:0.68rem;font-family:'Space Mono',monospace;margin:10px 0 4px;">Can Draw (${permitted.length})</div>`;
+    if (permitted.length === 0) {
+        html += `<div style="color:#555;font-size:0.68rem;">Only you</div>`;
+    } else {
+        permitted.forEach(p => {
+            html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span style="color:#f0f0f0;font-size:0.75rem;">${p.name}</span>
+                <button onclick="revokeDraw('${p.uid}')" style="background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 8px;font-size:0.65rem;cursor:pointer;color:#888;">Revoke</button>
+            </div>`;
+        });
+    }
+
+    wrap.innerHTML = html;
+    document.body.appendChild(wrap);
+}
+
+function grantDraw(uid) { socket.emit("grantDraw", { pin: currentRoom, uid }); }
+function revokeDraw(uid) { socket.emit("revokeDraw", { pin: currentRoom, uid }); }
+
+function showTeachToast(msg) {
+    let toast = document.getElementById("teach-toast");
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "teach-toast";
+        toast.style.cssText = `
+            position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+            background:#161616;border:1px solid rgba(255,255,255,0.15);
+            border-radius:10px;padding:8px 16px;z-index:600;
+            font-family:'Space Mono',monospace;font-size:0.72rem;
+            color:#f0f0f0;box-shadow:0 4px 20px rgba(0,0,0,0.4);
+            transition:opacity 0.3s;
+        `;
+        document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.opacity = "1";
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.style.opacity = "0"; }, 1800);
+}
+
 // ===== CLEAR =====
 function clearBoard() {
     if (!confirm("Clear the entire board?")) return;
@@ -1106,7 +1573,6 @@ function toggleChat() {
     box.classList.toggle("collapsed");
     if (chevron) chevron.style.transform = box.classList.contains("collapsed") ? "rotate(180deg)" : "";
 }
-
 // ===== RESET VIEW =====
 function resetView() {
     zoom = 1;
@@ -1152,17 +1618,6 @@ function showToolbar() {
     document.getElementById("toolbar").classList.remove("hidden");
     document.getElementById("tbShowBtn").classList.add("hidden");
 }
-
-// ===== RESET VIEW =====
-function resetView() {
-    zoom = 1;
-    vpX = 0;
-    vpY = 0;
-    redrawAll();
-    updateMinimap();
-}
-
-
 
 // ===== INTERACTIVE TUTORIAL =====
 const TUTORIAL_STEPS = [
@@ -1218,6 +1673,12 @@ const TUTORIAL_STEPS = [
         title: "Rooms 🚪",
         description: "NEW creates a private room with a PIN. Share the PIN with friends — only they can join!",
         target: "[onclick='createRoom()']",
+        position: "left"
+    },
+    {
+        title: "Teaching Room 🎓",
+        description: "TEACH creates a room where you're the teacher. Students must raise their hand before they can draw!",
+        target: "[onclick='createTeachingRoom()']",
         position: "left"
     },
     {
@@ -1444,25 +1905,7 @@ function endTutorial() {
     removeTutorialUI();
     tutorialActive = false;
     localStorage.setItem("ds_tutorial_done", "1");
-}
-
-// ===== SPRAY =====
-function drawSpray(wx, wy, c, size) {
-    const sp = worldToScreen(wx, wy);
-    const radius = size * 3 * zoom;
-    const density = Math.max(10, size * 4);
-    ctx.fillStyle = c;
-    ctx.globalAlpha = 0.6;
-    for (let i = 0; i < density; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const r = Math.random() * radius;
-        ctx.beginPath();
-        ctx.arc(sp.x + r * Math.cos(angle), sp.y + r * Math.sin(angle), 0.8, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-}
-
+        }
 // ===== FLOOD FILL =====
 function floodFill(wx, wy, fillColor) {
     const sp = worldToScreen(wx, wy);
@@ -1719,7 +2162,6 @@ function removeScaleUI() {
     if (el) el.remove();
     scaleActive = false;
 }
-
 // ===== CUT & RESIZE TOOL =====
 let selectionRect = null;
 let selectionStart = null;
