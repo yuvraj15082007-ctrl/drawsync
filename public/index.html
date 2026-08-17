@@ -200,27 +200,29 @@
 
     <div class="tb-divider"></div>
 
-    <!-- Rooms -->
-    <div class="tb-item">
-        <button class="tool-btn" onclick="createRoom()" title="New Room">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
-        <span class="tb-label">New</span>
-    </div>
+    <!-- Rooms — hidden while already inside a Teaching Room (irrelevant mid-session) -->
+    <div id="roomCreateGroup">
+        <div class="tb-item">
+            <button class="tool-btn" onclick="createRoom()" title="New Room">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <span class="tb-label">New</span>
+        </div>
 
-    <div class="tb-item">
-        <button class="tool-btn" onclick="joinRoom()" title="Join Room">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-        </button>
-        <span class="tb-label">Join</span>
-    </div>
+        <div class="tb-item">
+            <button class="tool-btn" onclick="joinRoom()" title="Join Room">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            </button>
+            <span class="tb-label">Join</span>
+        </div>
 
-    <!-- TEACHING ROOM -->
-    <div class="tb-item">
-        <button class="tool-btn" onclick="createTeachingRoom()" title="Create Teaching Room">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/></svg>
-        </button>
-        <span class="tb-label">Teach</span>
+        <!-- TEACHING ROOM -->
+        <div class="tb-item">
+            <button class="tool-btn" onclick="createTeachingRoom()" title="Create Teaching Room">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/></svg>
+            </button>
+            <span class="tb-label">Teach</span>
+        </div>
     </div>
 
     <!-- TEACHER-ONLY TOOLS — hidden unless this user is the teacher of a Teaching Room -->
@@ -265,7 +267,8 @@
 
     <div class="tb-divider"></div>
 
-    <div class="tb-item">
+    <!-- Clear — always visible outside Teaching Room; inside one, only the teacher gets it -->
+    <div class="tb-item" id="clearGroup">
         <button class="tool-btn danger" onclick="clearBoard()" title="Clear">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </button>
@@ -285,5 +288,4 @@
 <script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
 </body>
-        </html>
-        
+</html>
