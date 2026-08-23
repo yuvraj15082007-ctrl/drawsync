@@ -67,6 +67,7 @@
 <!-- Zoom controls — floating, above minimap -->
 <div class="zoom-controls">
     <button onclick="zoomAt(window.innerWidth/2,window.innerHeight/2,1.25)" title="Zoom In">+</button>
+    <div id="zoomPercent" style="text-align:center;font-family:'Space Mono',monospace;font-size:0.65rem;color:#888;padding:2px 0;">100%</div>
     <button onclick="resetView()" title="Reset">⊙</button>
     <button onclick="zoomAt(window.innerWidth/2,window.innerHeight/2,0.8)" title="Zoom Out">−</button>
 </div>
@@ -188,6 +189,13 @@
         <span class="tb-label">Redo</span>
     </div>
 
+    <div class="tb-item">
+        <button class="tool-btn" id="btn-autocorrect" onclick="toggleAutocorrect()" title="Autocorrect: straighten lines & round circles drawn with the pen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17c3-8 6-8 8 0s5 8 8 0"/><path d="M4 17l2-2M20 17l-2-2"/></svg>
+        </button>
+        <span class="tb-label">AutoFix</span>
+    </div>
+
     <div class="tb-divider"></div>
 
     <!-- Save -->
@@ -288,4 +296,5 @@
 <script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
 </body>
-</html>
+    </html>
+    
