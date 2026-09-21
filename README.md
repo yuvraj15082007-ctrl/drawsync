@@ -30,7 +30,7 @@ Built for **Smart India Hackathon** — Team **Survivors**.
   <tr>
 ---
 <img width="1600" height="817" alt="drawsyncss3" src="https://github.com/user-attachments/assets/8b10741c-c074-4fec-8748-20c1cdc668d1" />
-
+<img width="1600" height="818" alt="Screenshot 2026-09-20 122754_123249" src="https://github.com/user-attachments/assets/e5cf7e94-7c6a-4ac8-b4b1-61ae480278c8" />
 <img width="1600" height="826" alt="drawsyncss" src="https://github.com/user-attachments/assets/d7e25f9a-d12a-45fb-ae81-f5b3d316e9ae" />
 <img width="1600" height="825" alt="drawsyncss2" src="https://github.com/user-attachments/assets/fc77247b-506e-48f8-b26d-18c5c3ee564b" />
 
