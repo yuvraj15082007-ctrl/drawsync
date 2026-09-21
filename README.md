@@ -20,7 +20,7 @@
 
 Most collaborative whiteboards make you sign up, pay for real-time multi-user boards, or give you zero control once a session starts. **DrawSync** fixes that: open a room by PIN and start drawing together in seconds — and with **Teaching Room** mode, a teacher can run an entire live class with controlled drawing permissions, voice broadcast, and built-in geometry tools, all in one tab.
 
-Built for **Smart India Hackathon** — Team **Survivors**.
+Team **Survivors**.
 
 ---
 
@@ -131,13 +131,13 @@ The app runs at `http://localhost:10000` (or the port set by `process.env.PORT`)
 
 ## 👥 Team
 
-**Survivors** — Smart India Hackathon
+**Survivors** 
 
 ---
 
 ## 📄 License
 
-Add a license of your choice (e.g., MIT) here.
+This project is licensed under the [MIT License] [LICENSE].
 
 ---
 
